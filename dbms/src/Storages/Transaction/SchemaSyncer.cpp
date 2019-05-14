@@ -4,9 +4,12 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <Databases/DatabaseOrdinary.h>
 #include <Interpreters/InterpreterCreateQuery.h>
+#include <Interpreters/InterpreterRenameQuery.h>
 #include <Parsers/ASTCreateQuery.h>
+#include <Parsers/ASTRenameQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/parseQuery.h>
+#include <Parsers/ParserRenameQuery.h>
 #include <Storages/MutableSupport.h>
 #include <Storages/StorageMergeTree.h>
 #include <Storages/Transaction/SchemaSyncer.h>
@@ -77,7 +80,7 @@ String Curl::getTiDBTableInfoJson(TableID table_id, Context & context)
 
     if (result.empty() || result[0] == '[')
     {
-        throw DB::Exception("Table with ID = " + toString(table_id) + " does not exist in TiDB", ErrorCodes::LOGICAL_ERROR);
+        result.clear();
     }
 
     return result;
@@ -175,6 +178,27 @@ void createTable(const TableInfo & table_info, Context & context)
     interpreter.execute();
 }
 
+void renameTable(const std::string & old_db, const std::string & old_tbl, const TableInfo & table_info, Context & context)
+{
+    auto rename = std::make_shared<ASTRenameQuery>();
+
+    ASTRenameQuery::Table from;
+    from.database = old_db;
+    from.table = old_tbl;
+
+    ASTRenameQuery::Table to;
+    to.database = table_info.db_name;
+    to.table = table_info.name;
+
+    ASTRenameQuery::Element elem;
+    elem.from = from;
+    elem.to = to;
+
+    rename->elements.emplace_back(elem);
+
+    InterpreterRenameQuery(rename, context).execute();
+}
+
 AlterCommands detectSchemaChanges(const TableInfo & table_info, const TableInfo & orig_table_info)
 {
     AlterCommands alter_commands;
@@ -242,40 +266,74 @@ void JsonSchemaSyncer::syncSchema(TableID table_id, Context & context, bool forc
     if (!force && tmt_context.storages.get(table_id))
         return;
 
+    if (ignored_tables.count(table_id))
+    {
+        return;
+    }
+
     /// Get table schema json from TiDB/TiKV.
     String table_info_json = getSchemaJson(table_id, context);
+    if (table_info_json.empty())
+    {
+        LOG_WARNING(log, __PRETTY_FUNCTION__ << ": Table " << table_id << "doesn't exist in TiDB, it may have been dropped.");
+        return;
+    }
 
     LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Table " << table_id << " info json: " << table_info_json);
 
     TableInfo table_info(table_info_json, false);
 
+    if (context.getTiDBService().ignoreDatabases().count(table_info.db_name))
+    {
+        ignored_tables.emplace(table_info.id);
+        LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Added table " << table_id << " into ignored list.");
+        return;
+    }
+
     auto storage = tmt_context.storages.get(table_id);
 
     if (storage == nullptr)
     {
-        /// Table not existing, create it.
         if (!context.isDatabaseExist(table_info.db_name))
         {
+            /// Database not existing, create it.
             LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Creating database " << table_info.db_name);
             createDatabase(table_info, context);
         }
 
         if (!context.isTableExist(table_info.db_name, table_info.name))
         {
+            /// Table not existing, create it.
             LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Creating table " << table_info.name);
             createTable(table_info, context);
             context.getTMTContext().storages.put(context.getTable(table_info.db_name, table_info.name));
+
+            /// Mangle for partition table.
+            bool is_partition_table = table_info.manglePartitionTableIfNeeded(table_id);
+            if (is_partition_table && !context.isTableExist(table_info.db_name, table_info.name))
+            {
+                LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Re-creating table after mangling partition table " << table_info.name);
+                createTable(table_info, context);
+                context.getTMTContext().storages.put(context.getTable(table_info.db_name, table_info.name));
+            }
+        }
+        else
+        {
+            // New table ID with existing table, for unknown reasons.
+            // Maybe table was dropped or renamed in TiDB but such change was not reflected to TiFlash
+            // and then was re-created using the same name.
+            throw DB::Exception(std::string(__PRETTY_FUNCTION__) + ": TMT storage with ID " + toString(table_id) + " doesn't exist but table " + table_info.db_name + "." + table_info.name + " exists.", ErrorCodes::LOGICAL_ERROR);
         }
 
-        /// Mangle for partition table.
-        bool is_partition_table = table_info.manglePartitionTableIfNeeded(table_id);
-        if (is_partition_table && !context.isTableExist(table_info.db_name, table_info.name))
-        {
-            LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Re-creating table after mangling partition table " << table_info.name);
-            createTable(table_info, context);
-            context.getTMTContext().storages.put(context.getTable(table_info.db_name, table_info.name));
-        }
         return;
+    }
+
+    // TODO: Check database name change?
+    // TODO: Partition table?
+    if (storage->getName() != table_info.name)
+    {
+        LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Renaming table " << table_info.db_name << "." << storage->getName() << " TO " << table_info.db_name << "." << table_info.name);
+        renameTable(table_info.db_name, storage->getName(), table_info, context);
     }
 
     /// Table existing, detect schema changes and apply.
