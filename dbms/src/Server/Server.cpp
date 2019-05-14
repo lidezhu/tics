@@ -301,12 +301,6 @@ int Server::main(const std::vector<std::string> & /*args*/)
     global_context->setFormatSchemaPath(format_schema_path.path() + "/");
     format_schema_path.createDirectories();
 
-    LOG_INFO(log, "Loading metadata.");
-    loadMetadataSystem(*global_context);
-    /// After attaching system databases we can initialize system log.
-    global_context->initializeSystemLogs();
-    /// After the system database is created, attach virtual system tables (in addition to query_log and part_log)
-    attachSystemTablesServer(*global_context->getDatabase("system"), has_zookeeper);
     /// Load raft related configs ahead of loading metadata, as TMT storage relies on TMT context, which needs these configs.
     if (config().has("raft"))
     {
@@ -348,15 +342,21 @@ int Server::main(const std::vector<std::string> & /*args*/)
         std::unordered_set<std::string> ignore_databases;
         if (config().has("tidb.ignore_databases"))
         {
+            LOG_INFO(log, "Found ignore databases.");
             String ignore_dbs = config().getString("tidb.ignore_databases");
             Poco::StringTokenizer string_tokens(ignore_dbs, ",");
             for (auto it = string_tokens.begin(); it != string_tokens.end(); it++) {
                 ignore_databases.emplace(*it);
             }
         }
-        LOG_INFO(log, "Found pd addrs.");
         global_context->initializeTiDBService(service_ip, status_port, ignore_databases);
     }
+    LOG_INFO(log, "Loading metadata.");
+    loadMetadataSystem(*global_context);
+    /// After attaching system databases we can initialize system log.
+    global_context->initializeSystemLogs();
+    /// After the system database is created, attach virtual system tables (in addition to query_log and part_log)
+    attachSystemTablesServer(*global_context->getDatabase("system"), has_zookeeper);
     /// Then, load remaining databases
     loadMetadata(*global_context);
     LOG_DEBUG(log, "Loaded metadata.");
