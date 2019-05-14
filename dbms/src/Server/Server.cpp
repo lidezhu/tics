@@ -308,6 +308,23 @@ int Server::main(const std::vector<std::string> & /*args*/)
     /// After the system database is created, attach virtual system tables (in addition to query_log and part_log)
     attachSystemTablesServer(*global_context->getDatabase("system"), has_zookeeper);
     /// Load raft related configs ahead of loading metadata, as TMT storage relies on TMT context, which needs these configs.
+    if (config().has("tidb"))
+    {
+        String service_ip = config().getString("tidb.service_ip");
+        String status_port = config().getString("tidb.status_port");
+        std::unordered_set<std::string> ignore_databases;
+        if (config().has("tidb.ignore_databases"))
+        {
+            LOG_INFO(log, "Found TiDB ignore databases.");
+            String ignore_dbs = config().getString("tidb.ignore_databases");
+            Poco::StringTokenizer string_tokens(ignore_dbs, ",");
+            for (auto it = string_tokens.begin(); it != string_tokens.end(); it++) {
+                ignore_databases.emplace(*it);
+            }
+        }
+        global_context->initializeTiDBService(service_ip, status_port, ignore_databases);
+        LOG_INFO(log, "TiDB service init done.");
+    }
     if (config().has("raft"))
     {
         String raft_service_addr = config().getString("raft.service_addr");
@@ -340,22 +357,6 @@ int Server::main(const std::vector<std::string> & /*args*/)
             global_context->setLearnerKey("engine");
         }
         global_context->initializeRaftService(raft_service_addr);
-    }
-    if (config().has("tidb"))
-    {
-        String service_ip = config().getString("tidb.service_ip");
-        String status_port = config().getString("tidb.status_port");
-        std::unordered_set<std::string> ignore_databases;
-        if (config().has("tidb.ignore_databases"))
-        {
-            String ignore_dbs = config().getString("tidb.ignore_databases");
-            Poco::StringTokenizer string_tokens(ignore_dbs, ",");
-            for (auto it = string_tokens.begin(); it != string_tokens.end(); it++) {
-                ignore_databases.emplace(*it);
-            }
-        }
-        LOG_INFO(log, "Found pd addrs.");
-        global_context->initializeTiDBService(service_ip, status_port, ignore_databases);
     }
     /// Then, load remaining databases
     loadMetadata(*global_context);
