@@ -4,12 +4,14 @@
 #include <DataTypes/DataTypesNumber.h>
 #include <Databases/DatabaseOrdinary.h>
 #include <Interpreters/InterpreterCreateQuery.h>
+#include <Interpreters/InterpreterDropQuery.h>
 #include <Interpreters/InterpreterRenameQuery.h>
 #include <Parsers/ASTCreateQuery.h>
+#include <Parsers/ASTDropQuery.h>
 #include <Parsers/ASTRenameQuery.h>
 #include <Parsers/ParserCreateQuery.h>
-#include <Parsers/parseQuery.h>
 #include <Parsers/ParserRenameQuery.h>
+#include <Parsers/parseQuery.h>
 #include <Storages/MutableSupport.h>
 #include <Storages/StorageMergeTree.h>
 #include <Storages/Transaction/SchemaSyncer.h>
@@ -178,6 +180,16 @@ void createTable(const TableInfo & table_info, Context & context)
     interpreter.execute();
 }
 
+void dropTable(const std::string & database_name, const std::string & table_name, Context & context)
+{
+    auto drop_query = std::make_shared<ASTDropQuery>();
+    drop_query->database = database_name;
+    drop_query->table = table_name;
+    ASTPtr ast_drop_query = drop_query;
+    InterpreterDropQuery drop_interpreter(ast_drop_query, context);
+    drop_interpreter.execute();
+}
+
 void renameTable(const std::string & old_db, const std::string & old_tbl, const TableInfo & table_info, Context & context)
 {
     auto rename = std::make_shared<ASTRenameQuery>();
@@ -301,9 +313,7 @@ void JsonSchemaSyncer::syncSchema(TableID table_id, Context & context, bool forc
             createDatabase(table_info, context);
         }
 
-        if (!context.isTableExist(table_info.db_name, table_info.name))
-        {
-            /// Table not existing, create it.
+        auto create_table_internal = [&]() {
             LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Creating table " << table_info.name);
             createTable(table_info, context);
             context.getTMTContext().storages.put(context.getTable(table_info.db_name, table_info.name));
@@ -316,13 +326,24 @@ void JsonSchemaSyncer::syncSchema(TableID table_id, Context & context, bool forc
                 createTable(table_info, context);
                 context.getTMTContext().storages.put(context.getTable(table_info.db_name, table_info.name));
             }
+        };
+
+        if (!context.isTableExist(table_info.db_name, table_info.name))
+        {
+            /// Table not existing, create it.
+            create_table_internal();
         }
         else
         {
-            // New table ID with existing table, for unknown reasons.
-            // Maybe table was dropped or renamed in TiDB but such change was not reflected to TiFlash
-            // and then was re-created using the same name.
-            throw DB::Exception(std::string(__PRETTY_FUNCTION__) + ": TMT storage with ID " + toString(table_id) + " doesn't exist but table " + table_info.db_name + "." + table_info.name + " exists.", ErrorCodes::LOGICAL_ERROR);
+            /// Table existing but with a new table ID, meaning this table is either be truncated (table ID changed by TiDB) or dropped-then-recreated.
+            /// Drop existing table and re-create.
+            LOG_DEBUG(log,
+                __PRETTY_FUNCTION__ << ": TMT storage with ID " << table_id << " doesn't exist but table " << table_info.db_name << "."
+                                    << table_info.name + " exists.");
+            LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Dropping table " << table_info.db_name << "." << table_info.name);
+            // TODO: Partition table?
+            dropTable(table_info.db_name, table_info.name, context);
+            create_table_internal();
         }
 
         return;
@@ -332,7 +353,9 @@ void JsonSchemaSyncer::syncSchema(TableID table_id, Context & context, bool forc
     // TODO: Partition table?
     if (storage->getTableName() != table_info.name)
     {
-        LOG_DEBUG(log, __PRETTY_FUNCTION__ << ": Renaming table " << table_info.db_name << "." << storage->getTableName() << " TO " << table_info.db_name << "." << table_info.name);
+        LOG_DEBUG(log,
+            __PRETTY_FUNCTION__ << ": Renaming table " << table_info.db_name << "." << storage->getTableName() << " TO "
+                                << table_info.db_name << "." << table_info.name);
         renameTable(table_info.db_name, storage->getTableName(), table_info, context);
     }
 
