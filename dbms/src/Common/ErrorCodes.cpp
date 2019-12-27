@@ -374,6 +374,7 @@ namespace ErrorCodes
     extern const int QUERY_IS_NOT_SUPPORTED_IN_MATERIALIZED_VIEW = 397;
     extern const int CANNOT_MPROTECT = 445;
     extern const int DECIMAL_OVERFLOW = 446;
+    extern const int UNKNOWN_COLUMN = 447;
 
 
     extern const int KEEPER_EXCEPTION = 999;

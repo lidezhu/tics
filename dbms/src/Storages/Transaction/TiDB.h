@@ -17,6 +17,7 @@
 namespace DB::ErrorCodes
 {
 extern const int LOGICAL_ERROR;
+extern const int UNKNOWN_COLUMN;
 }
 
 namespace TiDB

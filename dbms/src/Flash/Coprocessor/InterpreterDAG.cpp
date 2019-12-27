@@ -161,6 +161,7 @@ void InterpreterDAG::executeTS(const tipb::TableScan & ts, Pipeline & pipeline)
         throw Exception("Table id not specified in table scan executor", ErrorCodes::COP_BAD_DAG_REQUEST);
     }
     TableID table_id = ts.table_id();
+    TableStructureReadLockPtr lock;
     // TODO: Get schema version from DAG request.
     if (context.getSettingsRef().schema_version == DEFAULT_UNSPECIFIED_SCHEMA_VERSION)
     {
@@ -169,11 +170,11 @@ void InterpreterDAG::executeTS(const tipb::TableScan & ts, Pipeline & pipeline)
         {
             throw Exception("Table " + std::to_string(table_id) + " doesn't exist.", ErrorCodes::UNKNOWN_TABLE);
         }
-        table_lock = storage->lockStructure(false, __PRETTY_FUNCTION__);
+        lock = storage->lockStructure(false, __PRETTY_FUNCTION__);
     }
     else
     {
-        getAndLockStorageWithSchemaVersion(table_id, DEFAULT_UNSPECIFIED_SCHEMA_VERSION);
+        getAndLockStorageWithSchemaVersion(table_id, context.getSettingsRef().schema_version);
     }
 
     Names required_columns;
@@ -209,6 +210,7 @@ void InterpreterDAG::executeTS(const tipb::TableScan & ts, Pipeline & pipeline)
         source_columns.emplace_back(std::move(pair));
         is_ts_column.push_back(ci.tp() == TiDB::TypeTimestamp);
     }
+    table_lock = lock;
 
     analyzer = std::make_unique<DAGExpressionAnalyzer>(std::move(source_columns), context);
 
@@ -613,7 +615,24 @@ void InterpreterDAG::recordProfileStreams(Pipeline & pipeline, Int32 index)
 
 void InterpreterDAG::executeImpl(Pipeline & pipeline)
 {
-    executeTS(dag.getTS(), pipeline);
+    try
+    {
+        executeTS(dag.getTS(), pipeline);
+    }
+    catch (Exception & e)
+    {
+        if (context.getSettingsRef().schema_version == DEFAULT_UNSPECIFIED_SCHEMA_VERSION &&
+        (e.code() == ErrorCodes::UNKNOWN_COLUMN || e.code() == ErrorCodes::UNKNOWN_TABLE))
+        {
+            auto global_schema_version = context.getTMTContext().getSchemaSyncer()->getCurrentVersion();
+            auto start_time = Clock::now();
+            context.getTMTContext().getSchemaSyncer()->syncSchemas(context);
+            auto schema_sync_cost = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - start_time).count();
+            LOG_DEBUG(log, __PRETTY_FUNCTION__ << " Schema sync cost " << schema_sync_cost << "ms.");
+            if (global_schema_version != context.getTMTContext().getSchemaSyncer()->getCurrentVersion())
+                executeTS(dag.getTS(), pipeline);
+        }
+    }
     recordProfileStreams(pipeline, dag.getTSIndex());
 
     auto res = analyzeExpressions();
