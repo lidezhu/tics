@@ -459,7 +459,7 @@ ColumnID TableInfo::getColumnID(const String & name) const
     if (name == DB::MutableSupport::tidb_pk_column_name)
         return DB::InvalidColumnID;
 
-    throw DB::Exception(std::string(__PRETTY_FUNCTION__) + ": Unknown column name " + name, DB::ErrorCodes::LOGICAL_ERROR);
+    throw DB::Exception(std::string(__PRETTY_FUNCTION__) + ": Unknown column name " + name, DB::ErrorCodes::UNKNOWN_COLUMN);
 }
 
 String TableInfo::getColumnName(const ColumnID id) const
@@ -474,7 +474,7 @@ String TableInfo::getColumnName(const ColumnID id) const
 
     throw DB::Exception(
         std::string(__PRETTY_FUNCTION__) + ": Invalidate column id " + std::to_string(id) + " for table " + db_name + "." + name,
-        DB::ErrorCodes::LOGICAL_ERROR);
+        DB::ErrorCodes::UNKNOWN_COLUMN);
 }
 
 std::optional<std::reference_wrapper<const ColumnInfo>> TableInfo::getPKHandleColumn() const
