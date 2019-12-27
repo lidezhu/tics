@@ -160,8 +160,12 @@ void InterpreterDAG::executeTS(const tipb::TableScan & ts, Pipeline & pipeline)
         // do not have table id
         throw Exception("Table id not specified in table scan executor", ErrorCodes::COP_BAD_DAG_REQUEST);
     }
+    if (storage != nullptr)
+        storage.reset();
+    if (table_lock != nullptr)
+        table_lock.reset();
+
     TableID table_id = ts.table_id();
-    TableStructureReadLockPtr lock;
     // TODO: Get schema version from DAG request.
     if (context.getSettingsRef().schema_version == DEFAULT_UNSPECIFIED_SCHEMA_VERSION)
     {
@@ -170,7 +174,7 @@ void InterpreterDAG::executeTS(const tipb::TableScan & ts, Pipeline & pipeline)
         {
             throw Exception("Table " + std::to_string(table_id) + " doesn't exist.", ErrorCodes::UNKNOWN_TABLE);
         }
-        lock = storage->lockStructure(false, __PRETTY_FUNCTION__);
+        table_lock = storage->lockStructure(false, __PRETTY_FUNCTION__);
     }
     else
     {
@@ -210,7 +214,6 @@ void InterpreterDAG::executeTS(const tipb::TableScan & ts, Pipeline & pipeline)
         source_columns.emplace_back(std::move(pair));
         is_ts_column.push_back(ci.tp() == TiDB::TypeTimestamp);
     }
-    table_lock = lock;
 
     analyzer = std::make_unique<DAGExpressionAnalyzer>(std::move(source_columns), context);
 
