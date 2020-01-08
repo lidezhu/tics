@@ -617,6 +617,7 @@ void InterpreterDAG::recordProfileStreams(Pipeline & pipeline, Int32 index)
 
 void InterpreterDAG::executeImpl(Pipeline & pipeline)
 {
+    LOG_DEBUG(log, __PRETTY_FUNCTION__ << " begin executeImpl");
     try
     {
         executeTS(dag.getTS(), pipeline);
@@ -626,6 +627,7 @@ void InterpreterDAG::executeImpl(Pipeline & pipeline)
         if (context.getSettingsRef().schema_version == DEFAULT_UNSPECIFIED_SCHEMA_VERSION &&
         (e.code() == ErrorCodes::UNKNOWN_COLUMN || e.code() == ErrorCodes::UNKNOWN_TABLE))
         {
+            LOG_DEBUG(log, __PRETTY_FUNCTION__ << " retry execute ts");
             auto global_schema_version = context.getTMTContext().getSchemaSyncer()->getCurrentVersion();
             auto start_time = Clock::now();
             context.getTMTContext().getSchemaSyncer()->syncSchemas(context);
@@ -636,23 +638,28 @@ void InterpreterDAG::executeImpl(Pipeline & pipeline)
         }
     }
     recordProfileStreams(pipeline, dag.getTSIndex());
+    LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute ts");
 
     auto res = analyzeExpressions();
+    LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after analyze expressions");
     // execute selection
     if (res.has_where)
     {
         executeWhere(pipeline, res.before_where, res.filter_column_name);
         recordProfileStreams(pipeline, dag.getSelectionIndex());
+        LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute where");
     }
     if (res.need_aggregate)
     {
         // execute aggregation
         executeAggregation(pipeline, res.before_aggregation, res.aggregation_keys, res.aggregate_descriptions);
         recordProfileStreams(pipeline, dag.getAggregationIndex());
+        LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute agg");
     }
     if (res.before_order_and_select)
     {
         executeExpression(pipeline, res.before_order_and_select);
+        LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute expr");
     }
 
     if (res.has_order_by)
@@ -660,16 +667,19 @@ void InterpreterDAG::executeImpl(Pipeline & pipeline)
         // execute topN
         executeOrder(pipeline, res.order_column_names);
         recordProfileStreams(pipeline, dag.getTopNIndex());
+        LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute order");
     }
 
     // execute projection
     executeFinalProject(pipeline);
+    LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute project");
 
     // execute limit
     if (dag.hasLimit() && !dag.hasTopN())
     {
         executeLimit(pipeline);
         recordProfileStreams(pipeline, dag.getLimitIndex());
+        LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute limit");
     }
 }
 
@@ -702,7 +712,9 @@ BlockIO InterpreterDAG::execute()
 {
     Pipeline pipeline;
     executeImpl(pipeline);
+    LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute impl");
     executeUnion(pipeline);
+    LOG_DEBUG(log, __PRETTY_FUNCTION__ << " after execute union");
 
     BlockIO res;
     res.in = pipeline.firstStream();
