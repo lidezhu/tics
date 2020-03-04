@@ -53,6 +53,18 @@ InterpreterDAG::InterpreterDAG(Context & context_, const DAGQuerySource & dag_)
     {
         for (auto & condition : dag.getSelection().conditions())
             conditions.push_back(&condition);
+        if (dag.getSelection().has_bloom()) {
+            bf = new BloomFilter();
+            for (auto & uint64 : dag.getSelection().bloom().bit_set())
+            {
+                bf->PushU64(uint64);
+            }
+            bf->FinishBuild();
+            for (auto & uint64 : dag.getSelection().bloom().col_idx())
+            {
+                join_key.push_back(uint64);
+            }
+        }
     }
 }
 
