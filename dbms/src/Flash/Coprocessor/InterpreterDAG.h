@@ -113,7 +113,7 @@ private:
     Int32 handle_col_id = -1;
     std::vector<const tipb::Expr *> conditions;
 
-    std::vector<UInt64> join_key[100];
+    std::vector<String> join_key[100];
     std::shared_ptr<BloomFilter> bf[100];
 
     Poco::Logger * log;
