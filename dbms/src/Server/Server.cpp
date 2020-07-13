@@ -313,12 +313,19 @@ int Server::main(const std::vector<std::string> & /*args*/)
         LOG_INFO(log, "TiFlash proxy is terminated");
     });
 
-    if (false)
+    if (true)
     {
         // test encryption
         std::string file = "/tmp/tiflash/test.a";
         auto r = tiflash_instance_wrap.proxy_helper->fn_handle_get_file(tiflash_instance_wrap.proxy_helper->proxy_ptr, BaseBuffView(file));
         assert(r.res == FileEncryptionRes::Ok);
+        LOG_INFO(log, "FileEncryptionRes ok " << std::to_string((unsigned long)FileEncryptionRes::Ok));
+        LOG_INFO(log, "FileEncryptionRes key " << r.key);
+//        LOG_INFO(log, "FileEncryptionRes key " << *r.key);
+        LOG_INFO(log, "FileEncryptionRes iv " << r.iv);
+        LOG_INFO(log, "FileEncryptionRes error message " << r.erro_msg);
+        LOG_INFO(log, "FileEncryptionRes key size: " << std::to_string(r.key->size()));
+
 
         r = tiflash_instance_wrap.proxy_helper->fn_handle_new_file(tiflash_instance_wrap.proxy_helper->proxy_ptr, BaseBuffView(file));
         assert(r.res == FileEncryptionRes::Ok);

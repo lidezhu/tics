@@ -125,7 +125,6 @@ struct FileEncryptionInfo
         }
     }
 
-    FileEncryptionInfo() = default;
     FileEncryptionInfo(const FileEncryptionInfo &) = delete;
     FileEncryptionInfo(FileEncryptionInfo && src)
     {
