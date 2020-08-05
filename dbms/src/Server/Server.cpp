@@ -18,6 +18,8 @@
 #include <Functions/registerFunctions.h>
 #include <IO/HTTPCommon.h>
 #include <IO/ReadHelpers.h>
+#include <IO/FileProvider.h>
+#include <IO/createReadBufferFromFileBase.h>
 #include <Interpreters/AsynchronousMetrics.h>
 #include <Interpreters/DDLWorker.h>
 #include <Interpreters/IDAsPathUpgrader.h>
@@ -588,6 +590,16 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
     /// Init TiFlash metrics.
     global_context->initializeTiFlashMetrics();
+
+    /// Init File Provider
+    if (proxy_conf.is_proxy_runnable)
+    {
+        global_context->initializeFileProvider(&tiflash_instance_wrap, tiflash_instance_wrap.proxy_helper->checkEncryptionEnabled());
+    }
+    else
+    {
+        global_context->initializeFileProvider(&tiflash_instance_wrap, false);
+    }
 
     /// Set path for format schema files
     auto format_schema_path = Poco::File(config().getString("format_schema_path", path + "format_schemas/"));

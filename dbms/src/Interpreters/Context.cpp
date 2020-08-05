@@ -16,6 +16,7 @@
 #include <Common/setThreadName.h>
 #include <Common/Stopwatch.h>
 #include <Common/formatReadable.h>
+#include <Encryption/DataKeyManager.h>
 #include <Debug/DBGInvoker.h>
 #include <DataStreams/FormatFactory.h>
 #include <Databases/IDatabase.h>
@@ -50,9 +51,11 @@
 #include <Interpreters/SharedQueries.h>
 #include <Interpreters/Context.h>
 #include <Common/DNSCache.h>
+#include <IO/EncryptedFileProvider.h>
 #include <IO/ReadBufferFromFile.h>
 #include <IO/UncompressedCache.h>
 #include <IO/PersistedCache.h>
+#include <IO/PosixFileProvider.h>
 #include <Parsers/ASTCreateQuery.h>
 #include <Parsers/ParserCreateQuery.h>
 #include <Parsers/parseQuery.h>
@@ -161,6 +164,7 @@ struct ContextShared
     PartPathSelectorPtr part_path_selector_ptr;             /// PartPathSelector service instance.
     PathCapacityMetricsPtr path_capacity_ptr;               /// Path capacity metrics
     TiFlashMetricsPtr tiflash_metrics;                      /// TiFlash metrics registry.
+    FileProviderPtr file_provider;                          /// File provider.
 
     /// Named sessions. The user could specify session identifier to reuse settings and temporary tables in subsequent requests.
 
@@ -1505,6 +1509,29 @@ TiFlashMetricsPtr Context::getTiFlashMetrics() const
 {
     auto lock = getLock();
     return shared->tiflash_metrics;
+}
+
+void Context::initializeFileProvider(TiFlashServer * tiflash_instance_wrap, bool enable_encryption)
+{
+    auto lock = getLock();
+    if (shared->file_provider)
+        throw Exception("File provider has already been initialized.", ErrorCodes::LOGICAL_ERROR);
+    if (enable_encryption)
+    {
+        FileProviderPtr plain_file_provider = std::make_shared<PosixFileProvider>();
+        shared->file_provider = std::make_shared<EncryptedFileProvider>(plain_file_provider,
+            std::make_shared<DataKeyManager>(tiflash_instance_wrap));
+    }
+    else
+    {
+        shared->file_provider = std::make_shared<PosixFileProvider>();
+    }
+}
+
+FileProviderPtr Context::getFileProvider() const
+{
+    auto lock = getLock();
+    return shared->file_provider;
 }
 
 zkutil::ZooKeeperPtr Context::getZooKeeper() const

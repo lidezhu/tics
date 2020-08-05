@@ -54,6 +54,7 @@ public:
                  ColumnCachePtr &   column_cache_,
                  size_t             aio_threshold,
                  size_t             max_read_buffer_size,
+                 const FileProviderPtr &  file_provider_,
                  size_t             rows_threshold_per_read_ = DMFILE_READ_ROWS_THRESHOLD);
 
     Block getHeader() const { return toEmptyBlock(read_columns); }
@@ -90,10 +91,11 @@ private:
     const bool     enable_column_cache;
     ColumnCachePtr column_cache;
 
-
     const size_t rows_threshold_per_read;
 
     size_t next_pack_id = 0;
+
+    FileProviderPtr file_provider;
 
     Logger * log;
 };
