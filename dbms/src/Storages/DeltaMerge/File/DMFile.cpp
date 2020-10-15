@@ -63,6 +63,29 @@ DMFilePtr DMFile::restore(const FileProviderPtr & file_provider, UInt64 file_id,
     return dmfile;
 }
 
+DMFilePtr DMFile::create(const String & path)
+{
+    Logger * log = &Logger::get("DMFile");
+
+    DMFilePtr new_dmfile(new DMFile(path, Mode::SINGLE_FILE, Status::WRITABLE, log));
+    Poco::File file(path);
+    if (file.exists())
+    {
+        file.remove(true);
+        LOG_WARNING(log, "Existing dmfile, removed :" << path);
+    }
+    PageUtil::touchFile(path);
+
+    return new_dmfile;
+}
+
+DMFilePtr DMFile::restore(const FileProviderPtr & file_provider, const String & path)
+{
+    DMFilePtr dmfile(new DMFile(path, Mode::SINGLE_FILE, Status::READABLE, &Logger::get("DMFile")));
+    dmfile->readMeta(file_provider);
+    return dmfile;
+}
+
 String DMFile::colIndexCacheKey(const FileNameBase & file_name_base) const
 {
     if (isSingleFileMode())
@@ -311,6 +334,7 @@ void DMFile::finalize(WriteBuffer & buffer)
     writeIntBinary(footer.sub_file_stat_offset, buffer);
     writeIntBinary(footer.sub_file_num, buffer);
     writeIntBinary(static_cast<std::underlying_type_t<DMSingleFileFormatVersion>>(footer.file_format_version), buffer);
+    writeIntBinary(footer.magic_number, buffer);
     buffer.next();
     if (status != Status::WRITING)
         throw Exception("Expected WRITING status, now " + statusString(status));
@@ -388,6 +412,21 @@ void DMFile::remove(const FileProviderPtr & file_provider)
         file_provider->deleteDirectory(path(), true, true);
     }
 }
+
+bool DMFile::isValidDMFileInSingleFileMode(const FileProviderPtr & file_provider, const String & path)
+{
+    Poco::File file(path);
+    if (!file.isFile())
+        return false;
+
+    MagicNumber magic_number;
+    ReadBufferFromFileProvider buf(file_provider, path, EncryptionPath(path, ""));
+    buf.seek(file.getSize() - sizeof(MagicNumber), SEEK_SET);
+    DB::readIntBinary(magic_number, buf);
+    return magic_number == DMFile::Footer::magic_number;
+}
+
+const DMFile::MagicNumber DMFile::Footer::magic_number = 0x13579BDF13579BDF;
 
 } // namespace DM
 } // namespace DB
