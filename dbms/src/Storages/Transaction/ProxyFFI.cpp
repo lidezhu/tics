@@ -2,6 +2,7 @@
 #include <Encryption/AESCTRCipherStream.h>
 #include <Interpreters/Context.h>
 #include <Interpreters/SQLQuerySource.h>
+#include <Parsers/ASTSelectWithUnionQuery.h>
 #include <Storages/DeltaMerge/DeltaMergeStore.h>
 #include <Storages/DeltaMerge/File/DMFileBlockInputStream.h>
 #include <Storages/DeltaMerge/File/DMFileBlockOutputStream.h>
@@ -356,6 +357,9 @@ RawCppPtr GenTiFlashSnapshot(TiFlashServer * server, RaftCmdHeader header)
         String query_str = "SELECT * FROM " + storage->getDatabaseName() + "." + storage->getTableName();
         SQLQuerySource query_src(query_str.data(), query_str.data() + query_str.size());
         std::tie(std::ignore, query_info.query) = query_src.parse(0);
+
+        const ASTSelectWithUnionQuery & ast = typeid_cast<const ASTSelectWithUnionQuery &>(*query_info.query);
+        query_info.query = ast.list_of_selects->children[0];
 
         query_info.mvcc_query_info = std::move(mvcc_query_info);
 
