@@ -316,6 +316,7 @@ void DMFile::finalize(const FileProviderPtr & file_provider)
 void DMFile::finalize(WriteBuffer & buffer)
 {
     Footer footer;
+    footer.magic_number = DMFile::magic_number;
     std::tie(footer.meta_pack_info.meta_offset, footer.meta_pack_info.meta_size)           = writeMeta(buffer);
     std::tie(footer.meta_pack_info.pack_stat_offset, footer.meta_pack_info.pack_stat_size) = writePack(buffer);
     footer.sub_file_stat_offset                                                            = buffer.count();
@@ -426,14 +427,14 @@ bool DMFile::isValidDMFileInSingleFileMode(const FileProviderPtr & file_provider
     if (!file.isFile())
         return false;
 
-    MagicNumber magic_number;
+    MagicNumber number;
     ReadBufferFromFileProvider buf(file_provider, path, EncryptionPath(path, ""));
     buf.seek(file.getSize() - sizeof(MagicNumber), SEEK_SET);
-    DB::readIntBinary(magic_number, buf);
-    return magic_number == DMFile::Footer::magic_number;
+    DB::readIntBinary(number, buf);
+    return number == DMFile::magic_number;
 }
 
-const DMFile::MagicNumber DMFile::Footer::magic_number = 0x13579BDF13579BDF;
+const DMFile::MagicNumber DMFile::magic_number = 0x13579BDF13579BDF;
 
 } // namespace DM
 } // namespace DB
