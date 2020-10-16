@@ -338,11 +338,18 @@ void DMFile::finalize(WriteBuffer & buffer)
     buffer.next();
     if (status != Status::WRITING)
         throw Exception("Expected WRITING status, now " + statusString(status));
-    Poco::File old_file(path());
+
+    auto old_path = path();
+    Poco::File old_file(old_path);
     Poco::File old_ngc_file(ngcPath());
     status = Status::READABLE;
 
     auto       new_path = path();
+    // If the path is same, then this is a snapshot file, no need to rename the file
+    if (old_path == new_path)
+    {
+        return;
+    }
     Poco::File file(new_path);
     if (file.exists())
         file.remove();
