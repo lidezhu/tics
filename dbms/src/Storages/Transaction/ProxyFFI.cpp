@@ -407,7 +407,9 @@ SerializeTiFlashSnapshotRes SerializeTiFlashSnapshotInto(TiFlashServer * server,
 //    }
 //    fclose(file);
     auto snapshot_file = DM::DMFile::create(real_path);
+    std::cerr << "create snapshotfile into path " << real_path << "\n";
     DM::DMFileBlockOutputStream dst_stream(server->tmt->getContext(), snapshot_file, snapshot->write_columns);
+    std::cerr << "create DMFileBlockOutputStream into path " << real_path << "\n";
     auto & src_stream = snapshot->pipeline.firstStream();
     src_stream->readPrefix();
     dst_stream.writePrefix();
