@@ -354,14 +354,17 @@ RawCppPtr GenTiFlashSnapshot(TiFlashServer * server, RaftCmdHeader header)
         mvcc_query_info->regions_query_info.emplace_back(std::move(info));
 
         SelectQueryInfo query_info;
-        String query_str = "SELECT * FROM " + storage->getDatabaseName() + "." + storage->getTableName();
+        // query_info.query is just a placeholder
+//        String query_str = "SELECT * FROM " + storage->getDatabaseName() + "." + storage->getTableName();
+        String query_str = "SELECT 1";
         SQLQuerySource query_src(query_str.data(), query_str.data() + query_str.size());
         std::tie(std::ignore, query_info.query) = query_src.parse(0);
-
         const ASTSelectWithUnionQuery & ast = typeid_cast<const ASTSelectWithUnionQuery &>(*query_info.query);
         query_info.query = ast.list_of_selects->children[0];
 
         query_info.mvcc_query_info = std::move(mvcc_query_info);
+        DAGPreparedSets dag_sets{};
+        query_info.dag_query = std::make_unique<DAGQueryInfo>(std::vector<const tipb::Expr *>{}, dag_sets, std::vector<NameAndTypePair>{});
 
         QueryProcessingStage::Enum from_stage = QueryProcessingStage::FetchColumns;
 
