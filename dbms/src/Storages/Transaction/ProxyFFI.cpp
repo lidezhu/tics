@@ -13,6 +13,7 @@
 #include <Storages/Transaction/ProxyFFIType.h>
 #include <Storages/Transaction/Region.h>
 #include <Storages/Transaction/TMTContext.h>
+#include <Flash/Coprocessor/DAGQueryInfo.h>
 #include <sys/statvfs.h>
 
 namespace CurrentMetrics
