@@ -46,7 +46,7 @@ TiFlashSnapshot::~TiFlashSnapshot()
 
 PreHandledTiFlashSnapshot *preHandleTiFlashSnapshot(RegionPtr region, const String & path)
 {
-    return new PreHandledTiFlashSnapshot{region, path};
+    return new PreHandledTiFlashSnapshot{std::move(region), path};
 }
 
 void applyPreHandledTiFlashSnapshot(TMTContext * tmt, PreHandledTiFlashSnapshot * snap)
@@ -132,20 +132,28 @@ TiFlashSnapshot *genTiFlashSnapshot(TMTContext * tmt, uint64_t region_id)
 SerializeTiFlashSnapshotRes serializeTiFlashSnapshotInto(TMTContext * tmt, TiFlashSnapshot *snapshot, const String & path)
 {
     auto snapshot_file = DM::DMFile::create(path);
+    Poco::File file1(path);
+    std::cerr << "after create dmfile, file exists: " << file1.exists();
     uint64_t key_count = 0;
-    uint64_t total_size = 0;
     DM::DMFileBlockOutputStream dst_stream(tmt->getContext(), snapshot_file, snapshot->write_columns);
     auto & src_stream = snapshot->pipeline.firstStream();
+    Poco::File file2(path);
+    std::cerr << "after get src stream, file exists: " << file2.exists();
     src_stream->readPrefix();
     dst_stream.writePrefix();
+    Poco::File file3(path);
+    std::cerr << "after write prefile, file exists: " << file3.exists();
     while (auto block = src_stream->read())
     {
         key_count += block.rows();
-        total_size += block.bytes();
         dst_stream.write(block, 0);
+        Poco::File file4(path);
+        std::cerr << "after write block, file exists: " << file4.exists();
     }
     src_stream->readSuffix();
     dst_stream.writeSuffix();
+    Poco::File file(path);
+    uint64_t total_size = file.getSize();
     // if key_count is 0, file will be deleted
     return {1, key_count, total_size};
 }
