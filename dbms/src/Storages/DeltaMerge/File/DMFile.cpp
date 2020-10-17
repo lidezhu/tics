@@ -315,6 +315,7 @@ void DMFile::finalize(const FileProviderPtr & file_provider)
 
 void DMFile::finalize(WriteBuffer & buffer)
 {
+    std::cerr << "DMFile::finalize" << std::endl;
     Footer footer;
     footer.magic_number = DMFile::magic_number;
     std::tie(footer.meta_pack_info.meta_offset, footer.meta_pack_info.meta_size)           = writeMeta(buffer);

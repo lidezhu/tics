@@ -152,6 +152,8 @@ SerializeTiFlashSnapshotRes serializeTiFlashSnapshotInto(TMTContext * tmt, TiFla
     }
     src_stream->readSuffix();
     dst_stream.writeSuffix();
+    Poco::File file5(path);
+    std::cerr << "after write suffix, file exists: " << file5.exists() << std::endl;
     Poco::File file(path);
     uint64_t total_size = file.getSize();
     // if key_count is 0, file will be deleted

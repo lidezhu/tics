@@ -95,6 +95,7 @@ public:
 
         void flush()
         {
+            std::cerr << "flush plain_hashing\n";
             plain_hashing.next();
             plain_file->next();
 
