@@ -133,22 +133,22 @@ SerializeTiFlashSnapshotRes serializeTiFlashSnapshotInto(TMTContext * tmt, TiFla
 {
     auto snapshot_file = DM::DMFile::create(path);
     Poco::File file1(path);
-    std::cerr << "after create dmfile, file exists: " << file1.exists();
+    std::cerr << "after create dmfile, file exists: " << file1.exists() << std::endl;
     uint64_t key_count = 0;
     DM::DMFileBlockOutputStream dst_stream(tmt->getContext(), snapshot_file, snapshot->write_columns);
     auto & src_stream = snapshot->pipeline.firstStream();
     Poco::File file2(path);
-    std::cerr << "after get src stream, file exists: " << file2.exists();
+    std::cerr << "after get src stream, file exists: " << file2.exists() << std::endl;
     src_stream->readPrefix();
     dst_stream.writePrefix();
     Poco::File file3(path);
-    std::cerr << "after write prefile, file exists: " << file3.exists();
+    std::cerr << "after write prewrite, file exists: " << file3.exists() << std::endl;
     while (auto block = src_stream->read())
     {
         key_count += block.rows();
         dst_stream.write(block, 0);
         Poco::File file4(path);
-        std::cerr << "after write block, file exists: " << file4.exists();
+        std::cerr << "after write block, file exists: " << file4.exists() << std::endl;
     }
     src_stream->readSuffix();
     dst_stream.writeSuffix();
