@@ -346,9 +346,8 @@ void DMFile::finalize(WriteBuffer & buffer)
     auto       new_path = path();
     // If the path is same, then this is a snapshot file, no need to rename the file
     if (old_path == new_path)
-    {
         return;
-    }
+    std::cerr << "old_path " << old_path << " new_path " << new_path << std::endl;
     Poco::File old_file(old_path);
     Poco::File old_ngc_file(old_ngc_path);
     Poco::File file(new_path);
