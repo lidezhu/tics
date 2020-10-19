@@ -125,8 +125,7 @@ public:
                  size_t                      min_compress_block_size_,
                  size_t                      max_compress_block_size_,
                  const CompressionSettings & compression_settings_,
-                 const FileProviderPtr &     file_provider_,
-                 bool                        single_file_mode_ = false);
+                 const FileProviderPtr &     file_provider_);
 
     void write(const Block & block, size_t not_clean_rows);
     void finalize();
@@ -146,6 +145,7 @@ private:
     size_t              min_compress_block_size;
     size_t              max_compress_block_size;
     CompressionSettings compression_settings;
+    bool                single_file_mode;
 
     ColumnStreams column_streams;
 
@@ -154,7 +154,6 @@ private:
     SingleFileStreamPtr single_file_stream;
 
     FileProviderPtr file_provider;
-    bool            single_file_mode;
 };
 
 } // namespace DM

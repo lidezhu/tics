@@ -195,23 +195,9 @@ void ApplyPreHandledTiKVSnapshot(TiFlashServer * server, PreHandledTiKVSnapshot 
     }
 }
 
-struct PreHandledTiFlashSnapshot
-{
-    ~PreHandledTiFlashSnapshot();
-    RegionPtr region;
-};
-
-PreHandledTiFlashSnapshot::~PreHandledTiFlashSnapshot()
-{
-    std::cerr << "GC PreHandledTiFlashSnapshot success"
-              << "\n";
-}
-
 void ApplyPreHandledTiFlashSnapshot(TiFlashServer * server, PreHandledTiFlashSnapshot * snap)
 {
-    std::cerr << "ApplyPreHandledTiFlashSnapshot: " << snap->region->toString() << "\n";
-    auto & kvstore = server->tmt->getKVStore();
-    kvstore->handleApplySnapshot(snap->region, *server->tmt);
+    TiFlashSnapshotHandler::applyPreHandledTiFlashSnapshot(server->tmt, snap);
 }
 
 void ApplyPreHandledSnapshot(TiFlashServer * server, void * res, RawCppPtrType type)
@@ -253,10 +239,10 @@ void GcRawCppPtr(TiFlashServer *, RawCppPtr p)
                 delete reinterpret_cast<PreHandledTiKVSnapshot *>(ptr);
                 break;
             case RawCppPtrType::TiFlashSnapshot:
-                delete reinterpret_cast<TiFlashSnapshot *>(ptr);
+                TiFlashSnapshotHandler::deleteTiFlashSnapshot(reinterpret_cast<TiFlashSnapshot *>(ptr));
                 break;
             case RawCppPtrType::PreHandledTiFlashSnapshot:
-                delete reinterpret_cast<PreHandledTiFlashSnapshot *>(ptr);
+                TiFlashSnapshotHandler::deletePreHandledTiFlashSnapshot(reinterpret_cast<PreHandledTiFlashSnapshot *>(ptr));
                 break;
             case RawCppPtrType::SplitKeys:
                 delete reinterpret_cast<SplitKeys *>(ptr);
@@ -286,13 +272,13 @@ RawCppPtr GenTiFlashSnapshot(TiFlashServer * server, RaftCmdHeader header)
 
     try
     {
-        auto & kvstore = server->tmt->getKVStore();
+        auto & tmt = server->tmt;
+        auto & kvstore = tmt->getKVStore();
         // flush all data of region and persist
-        if (!kvstore->preGenTiFlashSnapshot(header.region_id, header.index, *server->tmt))
+        if (!kvstore->preGenTiFlashSnapshot(header.region_id, header.index, *tmt))
             return RawCppPtr(nullptr, RawCppPtrType::None);
-        // generate snapshot struct;
-        // TODO
-        return RawCppPtr(new TiFlashSnapshot(), RawCppPtrType::TiFlashSnapshot);
+
+        return RawCppPtr(TiFlashSnapshotHandler::genTiFlashSnapshot(tmt, header.region_id), RawCppPtrType::TiFlashSnapshot);
     }
     catch (...)
     {
@@ -301,62 +287,21 @@ RawCppPtr GenTiFlashSnapshot(TiFlashServer * server, RaftCmdHeader header)
     }
 }
 
-SerializeTiFlashSnapshotRes SerializeTiFlashSnapshotInto(TiFlashServer * server, TiFlashSnapshot *, BaseBuffView path)
+SerializeTiFlashSnapshotRes SerializeTiFlashSnapshotInto(TiFlashServer * server, TiFlashSnapshot * snapshot, BaseBuffView path)
 {
     std::string real_path(path.data, path.len);
-    std::cerr << "serializeInto TiFlashSnapshot into path " << real_path << "\n";
-    auto encryption_info = server->proxy_helper->newFile(real_path);
-    char buffer[TiFlashSnapshot::flag.size() + 10];
-    std::memset(buffer, 0, sizeof(buffer));
-    auto file = fopen(real_path.data(), "w");
-    if (encryption_info.res == FileEncryptionRes::Ok && encryption_info.method != EncryptionMethod::Plaintext)
-    {
-        std::cerr << "start to write encryption data"
-                  << "\n";
-        BlockAccessCipherStreamPtr cipher_stream = AESCTRCipherStream::createCipherStream(encryption_info, EncryptionPath(real_path, ""));
-        memcpy(buffer, TiFlashSnapshot::flag.data(), TiFlashSnapshot::flag.size());
-        cipher_stream->encrypt(0, buffer, TiFlashSnapshot::flag.size());
-        fputs(buffer, file);
-    }
-    else
-    {
-        fputs(TiFlashSnapshot::flag.data(), file);
-        std::cerr << "start to write data"
-                  << "\n";
-    }
-    fclose(file);
-    std::cerr << "finish write " << TiFlashSnapshot::flag.size() << " bytes "
+    std::cerr << "serialize TiFlashSnapshot into path " << real_path << "\n";
+    auto res = TiFlashSnapshotHandler::serializeTiFlashSnapshotInto(server->tmt, snapshot, real_path);
+    std::cerr << "finish write " << res.total_size << " bytes "
               << "\n";
-    // is key_count is 0, file will be deleted
-    return {1, 6, TiFlashSnapshot::flag.size()};
+    return res;
 }
 
 uint8_t IsTiFlashSnapshot(TiFlashServer * server, BaseBuffView path)
 {
     std::string real_path(path.data, path.len);
     std::cerr << "IsTiFlashSnapshot of path " << real_path << "\n";
-    bool res = false;
-    char buffer[TiFlashSnapshot::flag.size() + 10];
-    std::memset(buffer, 0, sizeof(buffer));
-    auto encryption_info = server->proxy_helper->getFile(path);
-    auto file = fopen(real_path.data(), "rb");
-    size_t bytes_read = 0;
-    if (encryption_info.res == FileEncryptionRes::Ok && encryption_info.method != EncryptionMethod::Plaintext)
-    {
-        std::cerr << "try to decrypt file"
-                  << "\n";
-
-        BlockAccessCipherStreamPtr cipher_stream = AESCTRCipherStream::createCipherStream(encryption_info, EncryptionPath(real_path, ""));
-        bytes_read = fread(buffer, 1, TiFlashSnapshot::flag.size(), file);
-        cipher_stream->decrypt(0, buffer, bytes_read);
-    }
-    else
-    {
-        bytes_read = fread(buffer, 1, TiFlashSnapshot::flag.size(), file);
-    }
-    fclose(file);
-    if (bytes_read == TiFlashSnapshot::flag.size() && memcmp(buffer, TiFlashSnapshot::flag.data(), TiFlashSnapshot::flag.size()) == 0)
-        res = true;
+    auto res = TiFlashSnapshotHandler::isTiFlashSnapshot(server->tmt, real_path);
     std::cerr << "start to check IsTiFlashSnapshot, res " << res << "\n";
     return res;
 }
@@ -370,10 +315,11 @@ RawCppPtr PreHandleTiFlashSnapshot(
         region.ParseFromArray(region_buff.data, (int)region_buff.len);
         auto & tmt = *server->tmt;
         auto new_region = GenRegionPtr(std::move(region), peer_id, index, term, tmt);
+        std::string real_path(path.data, path.len);
 
-        std::cerr << "PreHandleTiFlashSnapshot from path " << std::string_view(path) << " region " << region.id() << " peer " << peer_id
-                  << " index " << index << " term " << term << "\n";
-        return RawCppPtr(new PreHandledTiFlashSnapshot{new_region}, RawCppPtrType::PreHandledTiFlashSnapshot);
+        std::cerr << "PreHandleTiFlashSnapshot from path " << real_path << " region " << region.id() << " peer " << peer_id << " index "
+                  << index << " term " << term << "\n";
+        return RawCppPtr(TiFlashSnapshotHandler::preHandleTiFlashSnapshot(new_region, real_path), RawCppPtrType::PreHandledTiFlashSnapshot);
     }
     catch (...)
     {
@@ -381,14 +327,6 @@ RawCppPtr PreHandleTiFlashSnapshot(
         exit(-1);
     }
 }
-
-TiFlashSnapshot::~TiFlashSnapshot()
-{
-    std::cerr << "GC TiFlashSnapshot success"
-              << "\n";
-}
-
-const std::string TiFlashSnapshot::flag = "this is tiflash snapshot";
 
 GetRegionApproximateSizeKeysRes GetRegionApproximateSizeKeys(
     TiFlashServer *, uint64_t region_id, BaseBuffView start_key, BaseBuffView end_key)

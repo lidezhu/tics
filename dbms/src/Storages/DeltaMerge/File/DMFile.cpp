@@ -53,7 +53,7 @@ String getPathByStatus(const String & parent_path, UInt64 file_id, DMFile::Statu
 
 String DMFile::path() const
 {
-    return getPathByStatus(parent_path, file_id, status);
+    return !file_path.empty() ? file_path : getPathByStatus(parent_path, file_id, status);
 }
 
 String DMFile::ngcPath() const
@@ -103,6 +103,29 @@ DMFilePtr DMFile::restore(const FileProviderPtr & file_provider, UInt64 file_id,
     return dmfile;
 }
 
+DMFilePtr DMFile::create(const String & path)
+{
+    Logger * log = &Logger::get("DMFile");
+
+    DMFilePtr  new_dmfile(new DMFile(path, Mode::SINGLE_FILE, Status::WRITABLE, log));
+    Poco::File file(path);
+    if (file.exists())
+    {
+        file.remove(true);
+        LOG_WARNING(log, "Existing dmfile, removed :" << path);
+    }
+    PageUtil::touchFile(path);
+
+    return new_dmfile;
+}
+
+DMFilePtr DMFile::restore(const FileProviderPtr & file_provider, const String & path)
+{
+    DMFilePtr dmfile(new DMFile(path, Mode::SINGLE_FILE, Status::READABLE, &Logger::get("DMFile")));
+    dmfile->readMeta(file_provider);
+    return dmfile;
+}
+
 String DMFile::colIndexCacheKey(const FileNameBase & file_name_base) const
 {
     if (isSingleFileMode())
@@ -144,7 +167,7 @@ bool DMFile::isColIndexExist(const ColId & col_id) const
 
 const String DMFile::encryptionBasePath() const
 {
-    return parent_path + "/" + FOLDER_PREFIX_READABLE + DB::toString(file_id);
+    return !file_path.empty() ? file_path : parent_path + "/" + FOLDER_PREFIX_READABLE + DB::toString(file_id);
 }
 
 
@@ -339,6 +362,7 @@ void DMFile::finalize(const FileProviderPtr & file_provider)
 void DMFile::finalize(WriteBuffer & buffer)
 {
     Footer footer;
+    footer.magic_number                                                                    = DMFile::magic_number;
     std::tie(footer.meta_pack_info.meta_offset, footer.meta_pack_info.meta_size)           = writeMeta(buffer);
     std::tie(footer.meta_pack_info.pack_stat_offset, footer.meta_pack_info.pack_stat_size) = writePack(buffer);
     footer.sub_file_stat_offset                                                            = buffer.count();
@@ -357,14 +381,20 @@ void DMFile::finalize(WriteBuffer & buffer)
     writeIntBinary(footer.sub_file_stat_offset, buffer);
     writeIntBinary(footer.sub_file_num, buffer);
     writeIntBinary(static_cast<std::underlying_type_t<DMSingleFileFormatVersion>>(footer.file_format_version), buffer);
+    writeIntBinary(footer.magic_number, buffer);
     buffer.next();
     if (status != Status::WRITING)
         throw Exception("Expected WRITING status, now " + statusString(status));
-    Poco::File old_file(path());
-    Poco::File old_ngc_file(ngcPath());
-    status = Status::READABLE;
 
-    auto       new_path = path();
+    auto old_path     = path();
+    auto old_ngc_path = ngcPath();
+    status            = Status::READABLE;
+    auto new_path     = path();
+    // If the path is same, then this is a snapshot file, no need to rename the file
+    if (old_path == new_path)
+        return;
+    Poco::File old_file(old_path);
+    Poco::File old_ngc_file(old_ngc_path);
     Poco::File file(new_path);
     if (file.exists())
         file.remove();
@@ -478,6 +508,21 @@ void DMFile::remove(const FileProviderPtr & file_provider)
         }
     }
 }
+
+bool DMFile::isValidDMFileInSingleFileMode(const FileProviderPtr & file_provider, const String & path)
+{
+    Poco::File file(path);
+    if (!file.isFile())
+        return false;
+
+    MagicNumber                number;
+    ReadBufferFromFileProvider buf(file_provider, path, EncryptionPath(path, ""));
+    buf.seek(file.getSize() - sizeof(MagicNumber), SEEK_SET);
+    DB::readIntBinary(number, buf);
+    return number == DMFile::magic_number;
+}
+
+const DMFile::MagicNumber DMFile::magic_number = 0x23579BDF48799ADE;
 
 } // namespace DM
 } // namespace DB

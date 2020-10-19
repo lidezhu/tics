@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Flash/TiFlashSnapshotHandler.h>
 #include <Storages/Transaction/ColumnFamily.h>
 #include <Storages/Transaction/FileEncryption.h>
 
@@ -146,19 +147,6 @@ struct CppStrWithView
     CppStrWithView(std::string && v)
         : inner(new std::string(std::move(v)), RawCppPtrType::String), view(*reinterpret_cast<TiFlashRawString>(inner.ptr))
     {}
-};
-
-struct SerializeTiFlashSnapshotRes
-{
-    uint8_t ok;
-    uint64_t key_count;
-    uint64_t total_size;
-};
-
-struct TiFlashSnapshot
-{
-    ~TiFlashSnapshot();
-    static const std::string flag;
 };
 
 struct GetRegionApproximateSizeKeysRes
