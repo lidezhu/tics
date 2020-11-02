@@ -37,6 +37,7 @@ public:
 
 private:
     std::string file_name;
+    off_t offset;
     int fd;
 };
 

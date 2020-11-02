@@ -24,7 +24,7 @@ extern const int CANNOT_SEEK_THROUGH_FILE;
 extern const int CANNOT_SELECT;
 } // namespace ErrorCodes
 
-PosixRandomAccessFile::PosixRandomAccessFile(const std::string & file_name_, int flags) : file_name{file_name_}
+PosixRandomAccessFile::PosixRandomAccessFile(const std::string & file_name_, int flags) : file_name{file_name_}, offset{0}
 {
     ProfileEvents::increment(ProfileEvents::FileOpen);
 
@@ -69,10 +69,25 @@ void PosixRandomAccessFile::close()
     metric_increment.destroy();
 }
 
-off_t PosixRandomAccessFile::seek(off_t offset, int whence) { return ::lseek(fd, offset, whence); }
+off_t PosixRandomAccessFile::seek(off_t offset_, int whence)
+{
+    if (whence == SEEK_SET)
+    {
+        offset = offset_;
+    }
+    else if (whence == SEEK_CUR)
+    {
+        offset += offset_;
+    }
+    else
+    {
+        throwFromErrno("not support seek from end", ErrorCodes::CANNOT_OPEN_FILE);
+    }
+    return offset;
+}
 
-ssize_t PosixRandomAccessFile::read(char * buf, size_t size) { return ::read(fd, buf, size); }
+ssize_t PosixRandomAccessFile::read(char * buf, size_t size) { return ::pread(fd, buf, size, offset); }
 
-ssize_t PosixRandomAccessFile::pread(char * buf, size_t size, off_t offset) const { return ::pread(fd, buf, size, offset); }
+ssize_t PosixRandomAccessFile::pread(char * buf, size_t size, off_t offset_) const { return ::pread(fd, buf, size, offset_); }
 
 } // namespace DB
