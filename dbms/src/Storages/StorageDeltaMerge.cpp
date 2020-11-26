@@ -176,6 +176,7 @@ StorageDeltaMerge::StorageDeltaMerge( //
     assert(!table_column_defines.empty());
     store = std::make_shared<DeltaMergeStore>(global_context, data_path_contains_database_name, db_name_, table_name_,
         std::move(table_column_defines), std::move(handle_column_define), DeltaMergeStore::Settings());
+    store->restoreData();
 }
 
 void StorageDeltaMerge::drop()
@@ -828,6 +829,7 @@ void StorageDeltaMerge::rename(
     store = std::make_shared<DeltaMergeStore>(global_context,                //
         data_path_contains_database_name, new_database_name, new_table_name, //
         std::move(table_column_defines), std::move(handle_column_define), settings);
+    store->restoreData();
 }
 
 String StorageDeltaMerge::getTableName() const { return store->getTableName(); }

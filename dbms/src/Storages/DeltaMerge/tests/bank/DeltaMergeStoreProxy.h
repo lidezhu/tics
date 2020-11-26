@@ -35,7 +35,8 @@ public:
         table_column_defines->emplace_back(col_balance_define);
         ColumnDefine handle_column_define = (*table_column_defines)[0];
         store                             = std::make_shared<DeltaMergeStore>(
-            *context, "test", name, *table_column_defines, handle_column_define, DeltaMergeStore::Settings());
+            *context, true, "test", name, *table_column_defines, handle_column_define, DeltaMergeStore::Settings());
+        store->restoreData();
     }
     void upsertRow(UInt64 id, UInt64 balance, UInt64 tso);
 

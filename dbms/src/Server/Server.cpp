@@ -676,6 +676,10 @@ int Server::main(const std::vector<std::string> & /*args*/)
     }
 
     {
+        global_context->initializeDeltaMergeTaskPool();
+    }
+
+    {
         // Note that this must do before initialize schema sync service.
         do
         {

@@ -675,12 +675,11 @@ Handle Segment::getSplitPointSlow(DMContext & dm_context, const ReadInfo & read_
     return split_handle;
 }
 
-Segment::SplitInfo Segment::prepareSplit(DMContext & dm_context, const SegmentSnapshotPtr & segment_snap, WriteBatches & wbs) const
+std::pair<bool, Handle> Segment::isPhysicalSplit(DMContext & dm_context, const SegmentSnapshotPtr & segment_snap) const
 {
-    if (!dm_context.enable_logical_split         //
-        || segment_snap->stable->getPacks() <= 3 //
+    if (!dm_context.enable_logical_split || segment_snap->stable->getPacks() <= 3
         || segment_snap->delta->getRows() > segment_snap->stable->getRows())
-        return prepareSplitPhysical(dm_context, segment_snap, wbs);
+        return std::make_pair(true, Handle{});
     else
     {
         Handle split_point     = getSplitPointFast(dm_context, segment_snap->stable);
@@ -688,15 +687,28 @@ Segment::SplitInfo Segment::prepareSplit(DMContext & dm_context, const SegmentSn
         if (bad_split_point)
         {
             LOG_INFO(log, "Got bad split point [" << split_point << "] for segment " << info() << ", fall back to split physical.");
-            return prepareSplitPhysical(dm_context, segment_snap, wbs);
+            return std::make_pair(true, Handle{});
         }
         else
-            return prepareSplitLogical(dm_context, segment_snap, split_point, wbs);
+            return std::make_pair(false, split_point);
     }
 }
 
-Segment::SplitInfo
-Segment::prepareSplitLogical(DMContext & dm_context, const SegmentSnapshotPtr & segment_snap, Handle split_point, WriteBatches & wbs) const
+Segment::SplitInfo Segment::prepareSplit(DMContext & dm_context, const SegmentSnapshotPtr & segment_snap, WriteBatches & wbs) const
+{
+    Handle split_point;
+    bool        is_physical;
+    std::tie(is_physical, split_point) = isPhysicalSplit(dm_context, segment_snap);
+    if (is_physical)
+        return prepareSplitPhysical(dm_context, segment_snap, wbs);
+    else
+        return prepareSplitLogical(dm_context, segment_snap, split_point, wbs);
+}
+
+Segment::SplitInfo Segment::prepareSplitLogical(DMContext &                dm_context,
+                                                const SegmentSnapshotPtr & segment_snap,
+                                                Handle              split_point,
+                                                WriteBatches &             wbs) const
 {
     LOG_INFO(log, "Segment [" << segment_id << "] prepare split logical start");
 

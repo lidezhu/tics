@@ -94,6 +94,9 @@ using PathCapacityMetricsPtr = std::shared_ptr<PathCapacityMetrics>;
 namespace DM
 {
 class MinMaxIndexCache;
+
+class DeltaMergeTaskPool;
+using DeltaMergeTaskPoolPtr = std::shared_ptr<DeltaMergeTaskPool>;
 }
 
 class TiFlashMetrics;
@@ -415,6 +418,9 @@ public:
 
     void initializeFileProvider(KeyManagerPtr key_manager, bool enable_encryption);
     FileProviderPtr getFileProvider() const;
+
+    void initializeDeltaMergeTaskPool();
+    DM::DeltaMergeTaskPoolPtr getDeltaMergeTaskPool() const;
 
     Clusters & getClusters() const;
     std::shared_ptr<Cluster> getCluster(const std::string & cluster_name) const;
