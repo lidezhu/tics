@@ -14,6 +14,7 @@
 #include <DataTypes/DataTypeString.h>
 #include <DataTypes/DataTypeTuple.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 
 #include <Common/FieldVisitors.h>
 #include <Common/NaNUtils.h>
@@ -331,11 +332,14 @@ Field convertFieldToType(const Field & from_value, const IDataType & to_type, co
     if (from_type_hint && from_type_hint->equals(to_type))
         return from_value;
 
-    if (to_type.isNullable())
+    if (const auto * low_cardinality_type = typeid_cast<const DataTypeLowCardinality *>(&to_type))
+        return convertFieldToType(from_value, *low_cardinality_type->getDictionaryType(), from_type_hint);
+    else if (const auto * nullable_type = typeid_cast<const DataTypeNullable *>(&to_type))
     {
-        const DataTypeNullable & nullable_type = static_cast<const DataTypeNullable &>(to_type);
-        const DataTypePtr & nested_type = nullable_type.getNestedType();
-        return convertFieldToTypeImpl(from_value, *nested_type);
+        const IDataType & nested_type = *nullable_type->getNestedType();
+        if (from_type_hint && from_type_hint->equals(nested_type))
+            return from_value;
+        return convertFieldToTypeImpl(from_value, nested_type);
     }
     else
         return convertFieldToTypeImpl(from_value, to_type);

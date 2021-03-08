@@ -228,16 +228,25 @@ void DMFileWriter::writeColumn(ColId col_id, const IDataType & type, const IColu
             },
             {});
 
-        type.serializeBinaryBulkWithMultipleStreams(column, //
-                                                    [&](const IDataType::SubstreamPath & substream) {
-                                                        const auto stream_name = DMFile::getFileNameBase(col_id, substream);
-                                                        auto &     stream      = column_streams.at(stream_name);
-                                                        return &(stream->original_hashing);
-                                                    },
+
+
+        auto [it, inserted] = serialization_states.emplace(col_id, nullptr);
+
+        if (inserted)
+        {
+            IDataType::SerializeBinaryBulkSettings serialize_settings;
+            serialize_settings.getter = createStreamGetter(col_id);
+            type.serializeBinaryBulkStatePrefix(serialize_settings, it->second);
+        }
+
+        IDataType::SerializeBinaryBulkSettings serialize_settings;
+        serialize_settings.getter = createStreamGetter(col_id);
+
+        type.serializeBinaryBulkWithMultipleStreams(column,
                                                     0,
                                                     rows,
-                                                    true,
-                                                    {});
+                                                    serialize_settings,
+                                                    it->second);
 
         type.enumerateStreams(
             [&](const IDataType::SubstreamPath & substream) {
@@ -289,6 +298,13 @@ void DMFileWriter::finalizeColumn(ColId col_id, DataTypePtr type)
     }
     else
     {
+        if (!serialization_states.empty())
+        {
+            IDataType::SerializeBinaryBulkSettings serialize_settings;
+            serialize_settings.getter = createStreamGetter(col_id);
+            type->serializeBinaryBulkStateSuffix(serialize_settings, serialization_states[col_id]);
+        }
+
         auto callback = [&](const IDataType::SubstreamPath & substream) {
             const auto stream_name = DMFile::getFileNameBase(col_id, substream);
             auto &     stream      = column_streams.at(stream_name);
@@ -309,6 +325,15 @@ void DMFileWriter::finalizeColumn(ColId col_id, DataTypePtr type)
 
     // Update column's bytes in disk
     dmfile->column_stats.at(col_id).serialized_bytes = bytes_written;
+}
+
+IDataType::OutputStreamGetter DMFileWriter::createStreamGetter(ColId col_id)
+{
+    return [&, this](const IDataType::SubstreamPath & substream) {
+        const auto stream_name = DMFile::getFileNameBase(col_id, substream);
+        auto &     stream      = column_streams.at(stream_name);
+        return &(stream->original_hashing);
+    };;
 }
 
 } // namespace DM

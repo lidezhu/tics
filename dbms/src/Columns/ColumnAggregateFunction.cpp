@@ -1,4 +1,5 @@
 #include <Columns/ColumnAggregateFunction.h>
+#include <Columns/ColumnsCommon.h>
 #include <AggregateFunctions/AggregateFunctionState.h>
 #include <DataStreams/ColumnGathererStream.h>
 #include <IO/WriteBufferFromArena.h>
@@ -159,6 +160,23 @@ ColumnPtr ColumnAggregateFunction::permute(const Permutation & perm, size_t limi
         res->getData()[i] = getData()[perm[i]];
 
     return std::move(res);
+}
+
+ColumnPtr ColumnAggregateFunction::index(const IColumn & indexes, size_t limit) const
+{
+    return selectIndexImpl(*this, indexes, limit);
+}
+
+template <typename Type>
+ColumnPtr ColumnAggregateFunction::indexImpl(const PaddedPODArray<Type> & indexes, size_t limit) const
+{
+    auto res = createView();
+
+    res->data.resize(limit);
+    for (size_t i = 0; i < limit; ++i)
+        res->data[i] = data[indexes[i]];
+
+    return res;
 }
 
 /// Is required to support operations with Set

@@ -21,21 +21,30 @@ public:
 
     void enumerateStreams(StreamCallback callback, SubstreamPath path) const override;
 
+    void serializeBinaryBulkStatePrefix(
+            SerializeBinaryBulkSettings & settings,
+            SerializeBinaryBulkStatePtr & state) const override;
+
+    void serializeBinaryBulkStateSuffix(
+            SerializeBinaryBulkSettings & settings,
+            SerializeBinaryBulkStatePtr & state) const override;
+
+    void deserializeBinaryBulkStatePrefix(
+            DeserializeBinaryBulkSettings & settings,
+            DeserializeBinaryBulkStatePtr & state) const override;
+
     void serializeBinaryBulkWithMultipleStreams(
         const IColumn & column,
-        OutputStreamGetter getter,
         size_t offset,
         size_t limit,
-        bool position_independent_encoding,
-        SubstreamPath path) const override;
+        SerializeBinaryBulkSettings & settings,
+        SerializeBinaryBulkStatePtr & state) const override;
 
     void deserializeBinaryBulkWithMultipleStreams(
         IColumn & column,
-        InputStreamGetter getter,
         size_t limit,
-        double avg_value_size_hint,
-        bool position_independent_encoding,
-        SubstreamPath path) const override;
+        DeserializeBinaryBulkSettings & settings,
+        DeserializeBinaryBulkStatePtr & state) const override;
 
     void serializeWidenBinaryBulkWithMultipleStreams(
         const IColumn & column,

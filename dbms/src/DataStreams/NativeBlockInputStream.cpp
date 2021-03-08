@@ -63,8 +63,13 @@ NativeBlockInputStream::NativeBlockInputStream(ReadBuffer & istr_, UInt64 server
 
 void NativeBlockInputStream::readData(const IDataType & type, IColumn & column, ReadBuffer & istr, size_t rows, double avg_value_size_hint)
 {
-    IDataType::InputStreamGetter input_stream_getter = [&] (const IDataType::SubstreamPath &) { return &istr; };
-    type.deserializeBinaryBulkWithMultipleStreams(column, input_stream_getter, rows, avg_value_size_hint, false, {});
+    IDataType::DeserializeBinaryBulkSettings settings;
+    settings.getter = [&] (const IDataType::SubstreamPath &) { return &istr; };
+    settings.avg_value_size_hint = avg_value_size_hint;
+    settings.position_independent_encoding = false;
+    IDataType::DeserializeBinaryBulkStatePtr state;
+    type.deserializeBinaryBulkStatePrefix(settings, state);
+    type.deserializeBinaryBulkWithMultipleStreams(column, rows, settings, state);
 
     if (column.size() != rows)
         throw Exception("Cannot read all data in NativeBlockInputStream.", ErrorCodes::CANNOT_READ_ALL_DATA);

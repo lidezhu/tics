@@ -113,6 +113,7 @@ struct HashTableCell
     /// Are the keys at the cells equal?
     bool keyEquals(const Key & key_) const { return key == key_; }
     bool keyEquals(const Key & key_, size_t /*hash_*/) const { return key == key_; }
+    bool keyEquals(const Key & key_, size_t /*hash_*/, const State & /*state*/) const { return key == key_; }
 
     /// If the cell can remember the value of the hash function, then remember it.
     void setHash(size_t /*hash_value*/) {}
@@ -291,9 +292,10 @@ protected:
 #endif
 
     /// Find a cell with the same key or an empty cell, starting from the specified position and further along the collision resolution chain.
-    size_t ALWAYS_INLINE findCell(const Key & x, size_t hash_value, size_t place_value) const
+    template <typename ObjectToCompareWith>
+    size_t ALWAYS_INLINE findCell(const ObjectToCompareWith & x, size_t hash_value, size_t place_value) const
     {
-        while (!buf[place_value].isZero(*this) && !buf[place_value].keyEquals(x, hash_value))
+        while (!buf[place_value].isZero(*this) && !buf[place_value].keyEquals(x, hash_value, *this))
         {
             place_value = grower.next(place_value);
 #ifdef DBMS_HASH_MAP_COUNT_COLLISIONS
@@ -644,12 +646,9 @@ protected:
         return false;
     }
 
-
-    /// Only for non-zero keys. Find the right place, insert the key there, if it does not already exist. Set iterator to the cell in output parameter.
-    void ALWAYS_INLINE emplaceNonZero(const Key & x, iterator & it, bool & inserted, size_t hash_value)
+    void ALWAYS_INLINE emplaceNonZeroImpl(size_t place_value, const Key &  x,
+                                          iterator & it, bool & inserted, size_t hash_value)
     {
-        size_t place_value = findCell(x, hash_value, grower.place(hash_value));
-
         it = iterator(this, &buf[place_value]);
 
         if (!buf[place_value].isZero(*this))
@@ -682,6 +681,14 @@ protected:
 
             it = find(x, hash_value);
         }
+    }
+
+
+    /// Only for non-zero keys. Find the right place, insert the key there, if it does not already exist. Set iterator to the cell in output parameter.
+    void ALWAYS_INLINE emplaceNonZero(const Key & x, iterator & it, bool & inserted, size_t hash_value)
+    {
+        size_t place_value = findCell(x, hash_value, grower.place(hash_value));
+        emplaceNonZeroImpl(place_value, x, it, inserted, hash_value);
     }
 
 
@@ -752,8 +759,8 @@ public:
             resize();
     }
 
-
-    iterator ALWAYS_INLINE find(const Key & x)
+    template <typename ObjectToCompareWith>
+    iterator ALWAYS_INLINE find(ObjectToCompareWith x)
     {
         if (Cell::isZero(x, *this))
             return this->hasZero() ? iteratorToZero() : end();
@@ -763,8 +770,8 @@ public:
         return !buf[place_value].isZero(*this) ? iterator(this, &buf[place_value]) : end();
     }
 
-
-    const_iterator ALWAYS_INLINE find(const Key & x) const
+    template <typename ObjectToCompareWith>
+    const_iterator ALWAYS_INLINE find(ObjectToCompareWith x) const
     {
         if (Cell::isZero(x, *this))
             return this->hasZero() ? iteratorToZero() : end();
@@ -774,8 +781,8 @@ public:
         return !buf[place_value].isZero(*this) ? const_iterator(this, &buf[place_value]) : end();
     }
 
-
-    iterator ALWAYS_INLINE find(const Key & x, size_t hash_value)
+    template <typename ObjectToCompareWith>
+    iterator ALWAYS_INLINE find(ObjectToCompareWith x, size_t hash_value)
     {
         if (Cell::isZero(x, *this))
             return this->hasZero() ? iteratorToZero() : end();
@@ -784,8 +791,8 @@ public:
         return !buf[place_value].isZero(*this) ? iterator(this, &buf[place_value]) : end();
     }
 
-
-    const_iterator ALWAYS_INLINE find(const Key & x, size_t hash_value) const
+    template <typename ObjectToCompareWith>
+    const_iterator ALWAYS_INLINE find(ObjectToCompareWith x, size_t hash_value) const
     {
         if (Cell::isZero(x, *this))
             return this->hasZero() ? iteratorToZero() : end();

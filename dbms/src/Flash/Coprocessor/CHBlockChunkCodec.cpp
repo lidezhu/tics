@@ -1,6 +1,7 @@
 #include <Common/TiFlashException.h>
 #include <DataStreams/IBlockInputStream.h>
 #include <DataStreams/NativeBlockInputStream.h>
+#include <DataTypes/IDataType.h>
 #include <Flash/Coprocessor/CHBlockChunkCodec.h>
 #include <IO/ReadBufferFromString.h>
 
@@ -37,8 +38,11 @@ void writeData(const IDataType & type, const ColumnPtr & column, WriteBuffer & o
     else
         full_column = column;
 
-    IDataType::OutputStreamGetter output_stream_getter = [&](const IDataType::SubstreamPath &) { return &ostr; };
-    type.serializeBinaryBulkWithMultipleStreams(*full_column, output_stream_getter, offset, limit, false, {});
+    IDataType::SerializeBinaryBulkSettings serialize_settings;
+    serialize_settings.getter = [&](const IDataType::SubstreamPath &) { return &ostr; };
+    serialize_settings.low_cardinality_max_dictionary_size = 8192;
+    IDataType::SerializeBinaryBulkStatePtr state;
+    type.serializeBinaryBulkWithMultipleStreams(*full_column, offset, limit, serialize_settings, state);
 }
 
 void CHBlockChunkCodecStream::encode(const Block & block, size_t start, size_t end)

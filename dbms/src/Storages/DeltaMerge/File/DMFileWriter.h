@@ -76,6 +76,9 @@ public:
     using StreamPtr     = std::unique_ptr<Stream>;
     using ColumnStreams = std::map<String, StreamPtr>;
 
+    using SerializationState = IDataType::SerializeBinaryBulkStatePtr;
+    using SerializationStates = std::unordered_map<ColId, SerializationState>;
+
     struct SingleFileStream
     {
         SingleFileStream(const DMFilePtr &       dmfile,
@@ -150,6 +153,9 @@ private:
     /// FileNameBase -> Stream.
     void addStreams(ColId col_id, DataTypePtr type, bool do_index);
 
+    IDataType::OutputStreamGetter createStreamGetter(ColId col_id);
+
+
 private:
     DMFilePtr           dmfile;
     ColumnDefines       write_columns;
@@ -159,6 +165,8 @@ private:
     const bool          single_file_mode;
 
     ColumnStreams column_streams;
+
+    SerializationStates serialization_states;
 
     WriteBufferFromFileBasePtr pack_stat_file;
 

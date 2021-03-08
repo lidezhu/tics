@@ -151,7 +151,14 @@ struct MinMaxValueFixed : public MinMaxValue
         auto & col_data = typeid_cast<ColumnVector<T> *>(col.get())->getData();
         col_data.push_back(min);
         col_data.push_back(max);
-        type.serializeBinaryBulkWithMultipleStreams(*col, [&](const IDataType::SubstreamPath &) { return &buf; }, 0, 2, true, {});
+        IDataType::SerializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+        settings.low_cardinality_max_dictionary_size = 0;
+
+        IDataType::SerializeBinaryBulkStatePtr state;
+        type.serializeBinaryBulkStatePrefix(settings, state);
+        type.serializeBinaryBulkWithMultipleStreams(*col, 0, 2, settings, state);
+        type.serializeBinaryBulkStateSuffix(settings, state);
     }
 
     static MinMaxValuePtr read(const IDataType & type, ReadBuffer & buf)
@@ -160,7 +167,12 @@ struct MinMaxValueFixed : public MinMaxValue
         readPODBinary(v->has_value, buf);
         auto   col      = type.createColumn();
         auto & col_data = typeid_cast<ColumnVector<T> *>(col.get())->getData();
-        type.deserializeBinaryBulkWithMultipleStreams(*col, [&](const IDataType::SubstreamPath &) { return &buf; }, 2, 0, true, {});
+        IDataType::DeserializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+
+        IDataType::DeserializeBinaryBulkStatePtr state;
+        type.deserializeBinaryBulkStatePrefix(settings, state);
+        type.deserializeBinaryBulkWithMultipleStreams(*col, 2, settings, state);
         v->min = col_data[0];
         v->max = col_data[1];
         return v;
@@ -234,7 +246,14 @@ struct MinMaxValueString : public MinMaxValue
         auto str_col = typeid_cast<ColumnString *>(col.get());
         str_col->insertData(min.data(), min.size());
         str_col->insertData(max.data(), max.size());
-        type.serializeBinaryBulkWithMultipleStreams(*col, [&](const IDataType::SubstreamPath &) { return &buf; }, 0, 2, true, {});
+        IDataType::SerializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+        settings.low_cardinality_max_dictionary_size = 0;
+
+        IDataType::SerializeBinaryBulkStatePtr state;
+        type.serializeBinaryBulkStatePrefix(settings, state);
+        type.serializeBinaryBulkWithMultipleStreams(*col, 0, 2, settings, state);
+        type.serializeBinaryBulkStateSuffix(settings, state);
     }
 
     static MinMaxValuePtr read(const IDataType & type, ReadBuffer & buf)
@@ -243,7 +262,12 @@ struct MinMaxValueString : public MinMaxValue
         readPODBinary(v->has_value, buf);
         auto col     = type.createColumn();
         auto str_col = typeid_cast<ColumnString *>(col.get());
-        type.deserializeBinaryBulkWithMultipleStreams(*col, [&](const IDataType::SubstreamPath &) { return &buf; }, 2, 0, true, {});
+        IDataType::DeserializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+
+        IDataType::DeserializeBinaryBulkStatePtr state;
+        type.deserializeBinaryBulkStatePrefix(settings, state);
+        type.deserializeBinaryBulkWithMultipleStreams(*col, 2, settings, state);
         v->min = str_col->getDataAt(0).toString();
         v->max = str_col->getDataAt(1).toString();
         return v;
@@ -312,7 +336,14 @@ struct MinMaxValueDataGeneric : public MinMaxValue
         auto col = type.createColumn();
         col->insert(min);
         col->insert(max);
-        type.serializeBinaryBulkWithMultipleStreams(*col, [&](const IDataType::SubstreamPath &) { return &buf; }, 0, 2, true, {});
+        IDataType::SerializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+        settings.low_cardinality_max_dictionary_size = 0;
+
+        IDataType::SerializeBinaryBulkStatePtr state;
+        type.serializeBinaryBulkStatePrefix(settings, state);
+        type.serializeBinaryBulkWithMultipleStreams(*col, 0, 2, settings, state);
+        type.serializeBinaryBulkStateSuffix(settings, state);
     }
 
     static MinMaxValuePtr read(const IDataType & type, ReadBuffer & buf)
@@ -320,7 +351,13 @@ struct MinMaxValueDataGeneric : public MinMaxValue
         auto v = std::make_shared<MinMaxValueDataGeneric>();
         readPODBinary(v->has_value, buf);
         auto col = type.createColumn();
-        type.deserializeBinaryBulkWithMultipleStreams(*col, [&](const IDataType::SubstreamPath &) { return &buf; }, 2, 0, true, {});
+
+        IDataType::DeserializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+
+        IDataType::DeserializeBinaryBulkStatePtr state;
+        type.deserializeBinaryBulkStatePrefix(settings, state);
+        type.deserializeBinaryBulkWithMultipleStreams(*col, 2, settings, state);
         col->get(0, v->min);
         col->get(1, v->max);
         return v;

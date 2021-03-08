@@ -1,5 +1,6 @@
 #include <IO/WriteBufferFromString.h>
 #include <IO/Operators.h>
+#include <Columns/ColumnNullable.h>
 #include <Columns/IColumn.h>
 
 
@@ -20,6 +21,11 @@ String IColumn::dumpStructure() const
 
     res << ")";
     return res.str();
+}
+
+bool isColumnNullable(const IColumn & column)
+{
+    return checkColumn<ColumnNullable>(column);
 }
 
 }

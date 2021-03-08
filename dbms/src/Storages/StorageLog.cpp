@@ -101,6 +101,10 @@ private:
     using FileStreams = std::map<std::string, Stream>;
     FileStreams streams;
 
+    using DeserializeState = IDataType::DeserializeBinaryBulkStatePtr;
+    using DeserializeStates = std::map<String, DeserializeState>;
+    DeserializeStates deserialize_states;
+
     void readData(const String & name, const IDataType & type, IColumn & column, size_t max_rows_to_read);
 };
 
@@ -167,6 +171,12 @@ private:
 
     WriteBufferFromFile marks_stream; /// Declared below `lock` to make the file open when rwlock is captured.
 
+    using SerializeState = IDataType::SerializeBinaryBulkStatePtr;
+    using SerializeStates = std::map<String, SerializeState>;
+    SerializeStates serialize_states;
+
+    IDataType::OutputStreamGetter createStreamGetter(const String & name, WrittenStreams & written_streams);
+
     void writeData(const String & name, const IDataType & type, const IColumn & column,
         MarksForColumns & out_marks,
         WrittenStreams & written_streams);
@@ -225,6 +235,7 @@ Block LogBlockInputStream::readImpl()
 
 void LogBlockInputStream::readData(const String & name, const IDataType & type, IColumn & column, size_t max_rows_to_read)
 {
+    IDataType::DeserializeBinaryBulkSettings settings; /// TODO Use avg_value_size_hint.
     IDataType::InputStreamGetter stream_getter = [&] (const IDataType::SubstreamPath & path) -> ReadBuffer *
     {
         String stream_name = IDataType::getFileNameForStream(name, path);
@@ -243,7 +254,13 @@ void LogBlockInputStream::readData(const String & name, const IDataType & type, 
         return &it->second.compressed;
     };
 
-    type.deserializeBinaryBulkWithMultipleStreams(column, stream_getter, max_rows_to_read, 0, true, {}); /// TODO Use avg_value_size_hint.
+    if (deserialize_states.count(name) == 0)
+    {
+        settings.getter = stream_getter;
+        type.deserializeBinaryBulkStatePrefix(settings, deserialize_states[name]);
+    }
+
+    type.deserializeBinaryBulkWithMultipleStreams(column, max_rows_to_read, settings, deserialize_states[name]); /// TODO Use avg_value_size_hint.
 }
 
 
@@ -273,6 +290,18 @@ void LogBlockOutputStream::writeSuffix()
         return;
     done = true;
 
+    WrittenStreams written_streams;
+    IDataType::SerializeBinaryBulkSettings settings;
+    for (const auto & column : getHeader())
+    {
+        auto it = serialize_states.find(column.name);
+        if (it != serialize_states.end())
+        {
+            settings.getter = createStreamGetter(column.name, written_streams);
+            column.type->serializeBinaryBulkStateSuffix(settings, it->second);
+        }
+    }
+
     /// Finish write.
     marks_stream.next();
 
@@ -290,10 +319,30 @@ void LogBlockOutputStream::writeSuffix()
 }
 
 
+IDataType::OutputStreamGetter LogBlockOutputStream::createStreamGetter(const String & name,
+                                                                       WrittenStreams & written_streams)
+{
+    return [&] (const IDataType::SubstreamPath & path) -> WriteBuffer *
+    {
+        String stream_name = IDataType::getFileNameForStream(name, path);
+        if (written_streams.count(stream_name))
+            return nullptr;
+
+        auto it = streams.find(stream_name);
+        if (streams.end() == it)
+            throw Exception("Logical error: stream was not created when writing data in LogBlockOutputStream",
+                            ErrorCodes::LOGICAL_ERROR);
+        return &it->second.compressed;
+    };
+}
+
+
 void LogBlockOutputStream::writeData(const String & name, const IDataType & type, const IColumn & column,
     MarksForColumns & out_marks,
     WrittenStreams & written_streams)
 {
+    IDataType::SerializeBinaryBulkSettings settings;
+
     type.enumerateStreams([&] (const IDataType::SubstreamPath & path)
     {
         String stream_name = IDataType::getFileNameForStream(name, path);
@@ -310,19 +359,12 @@ void LogBlockOutputStream::writeData(const String & name, const IDataType & type
         out_marks.emplace_back(file.column_index, mark);
     }, {});
 
-    IDataType::OutputStreamGetter stream_getter = [&] (const IDataType::SubstreamPath & path) -> WriteBuffer *
-    {
-        String stream_name = IDataType::getFileNameForStream(name, path);
-        if (written_streams.count(stream_name))
-            return nullptr;
+    settings.getter = createStreamGetter(name, written_streams);
+    if (serialize_states.count(name) == 0)
+        type.serializeBinaryBulkStatePrefix(settings, serialize_states[name]);
 
-        auto it = streams.find(stream_name);
-        if (streams.end() == it)
-            throw Exception("Logical error: stream was not created when writing data in LogBlockOutputStream", ErrorCodes::LOGICAL_ERROR);
-        return &it->second.compressed;
-    };
 
-    type.serializeBinaryBulkWithMultipleStreams(column, stream_getter, 0, 0, true, {});
+    type.serializeBinaryBulkWithMultipleStreams(column, 0, 0, settings, serialize_states[name]);
 
     type.enumerateStreams([&] (const IDataType::SubstreamPath & path)
     {

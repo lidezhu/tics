@@ -410,10 +410,12 @@ void DMFileReader::readFromDisk(
         auto & top_stream  = iter->second;
         bool   should_seek = force_seek || shouldSeek(start_pack_id) || skip_packs > 0;
 
+        IDataType::DeserializeBinaryBulkSettings settings;
+        settings.avg_value_size_hint = top_stream->avg_size_hint;
         auto data_type = dmfile->getColumnStat(column_define.id).type;
-        data_type->deserializeBinaryBulkWithMultipleStreams( //
-            *column,
-            [&](const IDataType::SubstreamPath & substream_path) {
+        if (deserialize_binary_bulk_state_map.count(column_define.id) == 0)
+        {
+            settings.getter = [&](const IDataType::SubstreamPath & substream_path) {
                 const auto substream_name = DMFile::getFileNameBase(column_define.id, substream_path);
                 auto &     sub_stream     = column_streams.at(substream_name);
 
@@ -424,11 +426,24 @@ void DMFileReader::readFromDisk(
                 }
 
                 return sub_stream->buf.get();
-            },
-            read_rows,
-            top_stream->avg_size_hint,
-            true,
-            {});
+            };
+            data_type->deserializeBinaryBulkStatePrefix(settings, deserialize_binary_bulk_state_map[column_define.id]);
+        }
+
+        settings.getter = [&](const IDataType::SubstreamPath & substream_path) {
+            const auto substream_name = DMFile::getFileNameBase(column_define.id, substream_path);
+            auto &     sub_stream     = column_streams.at(substream_name);
+
+            if (should_seek)
+            {
+                sub_stream->buf->seek(sub_stream->getOffsetInFile(start_pack_id),
+                                      sub_stream->getOffsetInDecompressedBlock(start_pack_id));
+            }
+
+            return sub_stream->buf.get();
+        };
+        auto & deserialize_state = deserialize_binary_bulk_state_map[column_define.id];
+        data_type->deserializeBinaryBulkWithMultipleStreams(*column, read_rows, settings, deserialize_state);
         IDataType::updateAvgValueSizeHint(*column, top_stream->avg_size_hint);
     }
 }

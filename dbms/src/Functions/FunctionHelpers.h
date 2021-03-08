@@ -26,20 +26,6 @@ bool checkDataType(const IDataType * data_type)
     return checkAndGetDataType<Type>(data_type);
 }
 
-
-template <typename Type>
-const Type * checkAndGetColumn(const IColumn * column)
-{
-    return typeid_cast<const Type *>(column);
-}
-
-template <typename Type>
-bool checkColumn(const IColumn * column)
-{
-    return checkAndGetColumn<Type>(column);
-}
-
-
 template <typename Type>
 const ColumnConst * checkAndGetColumnConst(const IColumn * column, bool maybe_nullable_column = false)
 {

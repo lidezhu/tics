@@ -5,6 +5,7 @@
 #include <DataTypes/DataTypeArray.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypesNumber.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <IO/WriteBuffer.h>
 #include <IO/WriteHelpers.h>
 #include <Interpreters/Context.h>
@@ -42,6 +43,15 @@ void AggregateFunctionFactory::registerFunction(const String & name, Creator cre
             ErrorCodes::LOGICAL_ERROR);
 }
 
+static DataTypes convertLowCardinalityTypesToNested(const DataTypes & types)
+{
+    DataTypes res_types;
+    res_types.reserve(types.size());
+    for (const auto & type : types)
+        res_types.emplace_back(recursiveRemoveLowCardinality(type));
+
+    return res_types;
+}
 
 AggregateFunctionPtr AggregateFunctionFactory::get(
     const String & name,
@@ -50,18 +60,19 @@ AggregateFunctionPtr AggregateFunctionFactory::get(
     int recursion_level,
     bool empty_input_as_null) const
 {
+    auto type_without_low_cardinality = convertLowCardinalityTypesToNested(argument_types);
     /// If one of types is Nullable, we apply aggregate function combinator "Null".
 
     /// for most aggregation functions except `count`, if the input is empty, the function should return NULL
     /// so add this flag to make it possible to follow this rule, currently only used by Coprocessor query
-    if (empty_input_as_null || std::any_of(argument_types.begin(), argument_types.end(),
+    if (empty_input_as_null || std::any_of(type_without_low_cardinality.begin(), type_without_low_cardinality.end(),
         [](const auto & type) { return type->isNullable(); }))
     {
         AggregateFunctionCombinatorPtr combinator = AggregateFunctionCombinatorFactory::instance().tryFindSuffix("Null");
         if (!combinator)
             throw Exception("Logical error: cannot find aggregate function combinator to apply a function to Nullable arguments.", ErrorCodes::LOGICAL_ERROR);
 
-        DataTypes nested_types = combinator->transformArguments(argument_types);
+        DataTypes nested_types = combinator->transformArguments(type_without_low_cardinality);
 
         AggregateFunctionPtr nested_function;
 
@@ -70,13 +81,13 @@ AggregateFunctionPtr AggregateFunctionFactory::get(
         /// A little hack - if we have NULL arguments, don't even create nested function.
         /// Combinator will check if nested_function was created.
         if (check_names.count(name)
-            || std::none_of(argument_types.begin(), argument_types.end(), [](const auto & type) { return type->onlyNull(); }))
+            || std::none_of(type_without_low_cardinality.begin(), type_without_low_cardinality.end(), [](const auto & type) { return type->onlyNull(); }))
             nested_function = getImpl(name, nested_types, parameters, recursion_level);
 
-        return combinator->transformAggregateFunction(nested_function, argument_types, parameters);
+        return combinator->transformAggregateFunction(nested_function, type_without_low_cardinality, parameters);
     }
 
-    auto res = getImpl(name, argument_types, parameters, recursion_level);
+    auto res = getImpl(name, type_without_low_cardinality, parameters, recursion_level);
     if (!res)
         throw Exception("Logical error: AggregateFunctionFactory returned nullptr", ErrorCodes::LOGICAL_ERROR);
     return res;

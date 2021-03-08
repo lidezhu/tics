@@ -51,6 +51,8 @@ public:
     using StreamPtr     = std::unique_ptr<Stream>;
     using ColumnStreams = std::map<String, StreamPtr>;
 
+    using DeserializeBinaryBulkStateMap = std::map<ColId, IDataType::DeserializeBinaryBulkStatePtr>;
+
     DMFileReader(const DMFilePtr &     dmfile_,
                  const ColumnDefines & read_columns_,
                  // clean read
@@ -91,6 +93,8 @@ private:
     DMFilePtr     dmfile;
     ColumnDefines read_columns;
     ColumnStreams column_streams;
+
+    DeserializeBinaryBulkStateMap deserialize_binary_bulk_state_map;
 
     /// Clean read optimize
     // If there is no delta for some packs in stable, we can try to do clean read.

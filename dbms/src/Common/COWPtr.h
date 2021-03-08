@@ -192,6 +192,59 @@ public:
     {
         return const_cast<Derived &>(*derived());
     }
+
+protected:
+    /// It works as immutable_ptr if it is const and as mutable_ptr if it is non const.
+    template <typename T>
+    class chameleon_ptr
+    {
+    private:
+        immutable_ptr<T> value;
+
+    public:
+        template <typename... Args>
+        chameleon_ptr(Args &&... args) : value(std::forward<Args>(args)...) {}
+
+        template <typename U>
+        chameleon_ptr(std::initializer_list<U> && arg) : value(std::forward<std::initializer_list<U>>(arg)) {}
+
+        const T * get() const { return value.get(); }
+        T * get() { return &value->assumeMutableRef(); }
+
+        const T * operator->() const { return get(); }
+        T * operator->() { return get(); }
+
+        const T & operator*() const { return *value; }
+        T & operator*() { return value->assumeMutableRef(); }
+
+        operator const immutable_ptr<T> & () const { return value; }
+        operator immutable_ptr<T> & () { return value; }
+
+        /// Get internal immutable ptr. Does not change internal use counter.
+        immutable_ptr<T> detach() && { return std::move(value); }
+
+        operator bool() const { return value != nullptr; }
+        bool operator! () const { return value == nullptr; }
+
+        bool operator== (const chameleon_ptr & rhs) const { return value == rhs.value; }
+        bool operator!= (const chameleon_ptr & rhs) const { return value != rhs.value; }
+    };
+
+public:
+    /** Use this type in class members for compositions.
+      *
+      * NOTE:
+      * For classes with WrappedPtr members,
+      * you must reimplement 'mutate' method, so it will call 'mutate' of all subobjects (do deep mutate).
+      * It will guarantee, that mutable object have all subobjects unshared.
+      *
+      * NOTE:
+      * If you override 'mutate' method in inherited classes, don't forget to make it virtual in base class or to make it call a virtual method.
+      * (COW itself doesn't force any methods to be virtual).
+      *
+      * See example in "cow_compositions.cpp".
+      */
+    using WrappedPtr = chameleon_ptr<Derived>;
 };
 
 

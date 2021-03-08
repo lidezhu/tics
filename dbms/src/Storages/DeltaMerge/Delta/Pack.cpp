@@ -19,12 +19,21 @@ void serializeColumn(MemoryWriteBuffer & buf, const IColumn & column, const Data
     CompressionMethod method = compress ? CompressionMethod::LZ4 : CompressionMethod::NONE;
 
     CompressedWriteBuffer compressed(buf, CompressionSettings(method));
+
+    IDataType::SerializeBinaryBulkSettings settings;
+    settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
+    settings.low_cardinality_max_dictionary_size = 0;
+
+    IDataType::SerializeBinaryBulkStatePtr state;
+    type->serializeBinaryBulkStatePrefix(settings, state);
+
     type->serializeBinaryBulkWithMultipleStreams(column, //
-                                                 [&](const IDataType::SubstreamPath &) { return &compressed; },
                                                  offset,
                                                  limit,
-                                                 true,
-                                                 {});
+                                                 settings,
+                                                 state);
+    type->serializeBinaryBulkStateSuffix(settings, state);
+
     compressed.next();
 }
 
@@ -32,12 +41,18 @@ void deserializeColumn(IColumn & column, const DataTypePtr & type, const ByteBuf
 {
     ReadBufferFromMemory buf(data_buf.begin(), data_buf.size());
     CompressedReadBuffer compressed(buf);
+
+    IDataType::DeserializeBinaryBulkSettings settings;
+    settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
+    settings.avg_value_size_hint = (double)(data_buf.size()) / rows;
+
+    IDataType::DeserializeBinaryBulkStatePtr state;
+    type->deserializeBinaryBulkStatePrefix(settings, state);
+
     type->deserializeBinaryBulkWithMultipleStreams(column, //
-                                                   [&](const IDataType::SubstreamPath &) { return &compressed; },
                                                    rows,
-                                                   (double)(data_buf.size()) / rows,
-                                                   true,
-                                                   {});
+                                                   settings,
+                                                   state);
 }
 
 inline void serializePack(const Pack & pack, const BlockPtr & schema, WriteBuffer & buf)

@@ -61,12 +61,19 @@ void MinMaxIndex::write(const IDataType & type, WriteBuffer & buf)
     DB::writeIntBinary(size, buf);
     buf.write((char *)has_null_marks->data(), sizeof(UInt8) * size);
     buf.write((char *)has_value_marks->data(), sizeof(UInt8) * size);
+    IDataType::SerializeBinaryBulkSettings settings;
+    settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+    settings.low_cardinality_max_dictionary_size = 0;
+
+    IDataType::SerializeBinaryBulkStatePtr state;
+    type.serializeBinaryBulkStatePrefix(settings, state);
+
     type.serializeBinaryBulkWithMultipleStreams(*minmaxes, //
-                                                [&](const IDataType::SubstreamPath &) { return &buf; },
                                                 0,
                                                 size * 2,
-                                                true,
-                                                {});
+                                                settings,
+                                                state);
+    type.serializeBinaryBulkStateSuffix(settings, state);
 }
 
 MinMaxIndexPtr MinMaxIndex::read(const IDataType & type, ReadBuffer & buf, size_t bytes_limit)
@@ -82,12 +89,16 @@ MinMaxIndexPtr MinMaxIndex::read(const IDataType & type, ReadBuffer & buf, size_
     auto minmaxes        = type.createColumn();
     buf.read((char *)has_null_marks->data(), sizeof(UInt8) * size);
     buf.read((char *)has_value_marks->data(), sizeof(UInt8) * size);
+    IDataType::DeserializeBinaryBulkSettings settings;
+    settings.getter = [&](const IDataType::SubstreamPath &) { return &buf; };
+
+    IDataType::DeserializeBinaryBulkStatePtr state;
+    type.deserializeBinaryBulkStatePrefix(settings, state);
+
     type.deserializeBinaryBulkWithMultipleStreams(*minmaxes, //
-                                                  [&](const IDataType::SubstreamPath &) { return &buf; },
                                                   size * 2,
-                                                  0,
-                                                  true,
-                                                  {});
+                                                  settings,
+                                                  state);
     size_t bytes_read = buf.count() - buf_pos;
     if (unlikely(bytes_read != bytes_limit))
     {

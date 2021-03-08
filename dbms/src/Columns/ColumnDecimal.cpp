@@ -98,6 +98,12 @@ ColumnPtr ColumnDecimal<T>::permute(const IColumn::Permutation & perm, size_t li
 }
 
 template <typename T>
+ColumnPtr ColumnDecimal<T>::index(const IColumn & indexes, size_t limit) const
+{
+    return selectIndexImpl(*this, indexes, limit);
+}
+
+template <typename T>
 MutableColumnPtr ColumnDecimal<T>::cloneResized(size_t size) const
 {
     auto res = this->create(0, scale);

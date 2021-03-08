@@ -3,6 +3,7 @@
 #include <Columns/Collator.h>
 #include <Core/Field.h>
 #include <Common/COWPtr.h>
+#include <Common/typeid_cast.h>
 #include <Common/PODArray.h>
 #include <Common/Exception.h>
 #include <common/StringRef.h>
@@ -48,6 +49,10 @@ public:
       * If column is constant, transforms constant to full column (if column type allows such tranform) and return it.
       */
     virtual Ptr convertToFullColumnIfConst() const { return {}; }
+
+    /// If column isn't ColumnLowCardinality, return itself.
+    /// If column is ColumnLowCardinality, transforms is to full column.
+    virtual Ptr convertToFullColumnIfLowCardinality() const { return getPtr(); }
 
     /// Creates empty column with the same type.
     virtual MutablePtr cloneEmpty() const { return cloneResized(0); }
@@ -190,6 +195,10 @@ public:
     /// limit - if it isn't 0, puts only first limit elements in the result.
     using Permutation = PaddedPODArray<size_t>;
     virtual Ptr permute(const Permutation & perm, size_t limit) const = 0;
+
+    /// Creates new column with values column[indexes[:limit]]. If limit is 0, all indexes are used.
+    /// Indexes must be one of the ColumnUInt. For default implementation, see selectIndexImpl from ColumnsCommon.h
+    virtual Ptr index(const IColumn & indexes, size_t limit) const = 0;
 
     /** Compares (*this)[n] and rhs[m].
       * Returns negative number, 0, or positive number (*this)[n] is less, equal, greater than rhs[m] respectively.
@@ -342,6 +351,8 @@ public:
     /// Can be inside ColumnNullable.
     virtual bool canBeInsideNullable() const { return false; }
 
+    virtual bool lowCardinality() const { return false; }
+
 
     virtual ~IColumn() {}
 
@@ -401,5 +412,32 @@ struct IsMutableColumns<Arg, Args ...>
 
 template <>
 struct IsMutableColumns<> { static const bool value = true; };
+
+template <typename Type>
+const Type * checkAndGetColumn(const IColumn & column)
+{
+    return typeid_cast<const Type *>(&column);
+}
+
+template <typename Type>
+const Type * checkAndGetColumn(const IColumn * column)
+{
+    return typeid_cast<const Type *>(column);
+}
+
+template <typename Type>
+bool checkColumn(const IColumn & column)
+{
+    return checkAndGetColumn<Type>(&column);
+}
+
+template <typename Type>
+bool checkColumn(const IColumn * column)
+{
+    return checkAndGetColumn<Type>(column);
+}
+
+/// True if column's an ColumnNullable instance. It's just a syntax sugar for type check.
+bool isColumnNullable(const IColumn & column);
 
 }

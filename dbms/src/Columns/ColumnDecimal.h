@@ -120,7 +120,8 @@ public:
 
     ColumnPtr filter(const IColumn::Filter & filt, ssize_t result_size_hint) const override;
     ColumnPtr permute(const IColumn::Permutation & perm, size_t limit) const override;
-    //ColumnPtr index(const IColumn & indexes, size_t limit) const override;
+
+    ColumnPtr index(const IColumn & indexes, size_t limit) const override;
 
     template <typename Type>
     ColumnPtr indexImpl(const PaddedPODArray<Type> & indexes, size_t limit) const;

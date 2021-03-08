@@ -847,7 +847,14 @@ String createTableStmt(const DBInfo & db_info, const TableInfo & table_info, con
             writeString(", ", stmt_buf);
         writeBackQuotedString(columns[i].name, stmt_buf);
         writeString(" ", stmt_buf);
-        writeString(columns[i].type->getName(), stmt_buf);
+        if (columns[i].type->getName() == "String")
+        {
+            writeString("LowCardinality(String)", stmt_buf);
+        }
+        else
+        {
+            writeString(columns[i].type->getName(), stmt_buf);
+        }
     }
 
     // storage engine type

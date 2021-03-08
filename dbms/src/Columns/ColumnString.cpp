@@ -161,6 +161,46 @@ ColumnPtr ColumnString::permute(const Permutation & perm, size_t limit) const
     return std::move(res);
 }
 
+ColumnPtr ColumnString::index(const IColumn & indexes, size_t limit) const
+{
+    return selectIndexImpl(*this, indexes, limit);
+}
+
+template <typename Type>
+ColumnPtr ColumnString::indexImpl(const PaddedPODArray<Type> & indexes, size_t limit) const
+{
+    if (limit == 0)
+        return ColumnString::create();
+
+    auto res = ColumnString::create();
+
+    Chars_t & res_chars = res->chars;
+    Offsets & res_offsets = res->offsets;
+
+    size_t new_chars_size = 0;
+    for (size_t i = 0; i < limit; ++i)
+        new_chars_size += sizeAt(indexes[i]);
+    res_chars.resize(new_chars_size);
+
+    res_offsets.resize(limit);
+
+    Offset current_new_offset = 0;
+
+    for (size_t i = 0; i < limit; ++i)
+    {
+        size_t j = indexes[i];
+        size_t string_offset = offsets[j - 1];
+        size_t string_size = offsets[j] - string_offset;
+
+        memcpySmallAllowReadWriteOverflow15(&res_chars[current_new_offset], &chars[string_offset], string_size);
+
+        current_new_offset += string_size;
+        res_offsets[i] = current_new_offset;
+    }
+
+    return res;
+}
+
 
 template <bool positive>
 struct ColumnString::less

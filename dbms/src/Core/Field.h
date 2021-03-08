@@ -345,6 +345,16 @@ public:
     };
 
     template <typename T>
+    T & reinterpret();
+
+    template <typename T>
+    const T & reinterpret() const
+    {
+        auto mutable_this = const_cast<std::decay_t<decltype(*this)> *>(this);
+        return mutable_this->reinterpret<T>();
+    }
+
+    template <typename T>
     bool tryGet(T & result)
     {
         const Types::Which requested = TypeToEnum<std::decay_t<T>>::value;
@@ -786,6 +796,14 @@ struct Field::EnumToType<Field::Types::Decimal256>
 {
     using Type = DecimalField<Decimal256>;
 };
+
+template <typename T>
+T & Field::reinterpret()
+{
+    using ValueType = std::decay_t<T>;
+    ValueType * MAY_ALIAS ptr = reinterpret_cast<ValueType *>(&storage);
+    return *ptr;
+}
 
 template <typename T>
 T get(const Field & field)
