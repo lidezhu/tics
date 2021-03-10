@@ -1,6 +1,7 @@
 #include <IO/CompressedReadBuffer.h>
 #include <IO/CompressedWriteBuffer.h>
 #include <IO/MemoryReadWriteBuffer.h>
+#include <IO/copyData.h>
 #include <Storages/DeltaMerge/Delta/Pack.h>
 #include <Storages/DeltaMerge/convertColumnTypeHelpers.h>
 #include <Storages/Page/PageStorage.h>
@@ -17,42 +18,132 @@ using PageReadFields = PageStorage::PageReadFields;
 void serializeColumn(MemoryWriteBuffer & buf, const IColumn & column, const DataTypePtr & type, size_t offset, size_t limit, bool compress)
 {
     CompressionMethod method = compress ? CompressionMethod::LZ4 : CompressionMethod::NONE;
+    if (type->lowCardinality())
+    {
+        MemoryWriteBuffer buf_keys;
+        MemoryWriteBuffer buf_data;
+        CompressedWriteBuffer compressed_keys(buf_keys, CompressionSettings(method));
+        CompressedWriteBuffer compressed_data(buf_data, CompressionSettings(method));
+        IDataType::SerializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath & path) {
+            if (path[0].type == IDataType::Substream::DictionaryKeys)
+            {
+                return &compressed_keys;
+            } else {
+                return &compressed_data;
+            }
+        };
 
-    CompressedWriteBuffer compressed(buf, CompressionSettings(method));
+        IDataType::SerializeBinaryBulkStatePtr state;
+        type->serializeBinaryBulkStatePrefix(settings, state);
 
-    IDataType::SerializeBinaryBulkSettings settings;
-    settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
-    settings.low_cardinality_max_dictionary_size = 0;
+        type->serializeBinaryBulkWithMultipleStreams(column, //
+                                                     offset,
+                                                     limit,
+                                                     settings,
+                                                     state);
+        type->serializeBinaryBulkStateSuffix(settings, state);
+        compressed_keys.next();
+        compressed_data.next();
 
-    IDataType::SerializeBinaryBulkStatePtr state;
-    type->serializeBinaryBulkStatePrefix(settings, state);
+        UInt64 keys_size = buf_keys.count();
+        writeVarUInt(keys_size, buf);
+        auto read_buf_keys = buf_keys.tryGetReadBuffer();
+        if (read_buf_keys == nullptr)
+        {
+            throw Exception("cannot happen");
+        }
+        copyData(*read_buf_keys, buf);
+        auto read_buf_data = buf_data.tryGetReadBuffer();
+        if (read_buf_data == nullptr)
+        {
+            throw Exception("cannot happen");
+        }
+        copyData(*read_buf_data, buf);
+    }
+    else
+    {
+        CompressedWriteBuffer compressed(buf, CompressionSettings(method));
 
-    type->serializeBinaryBulkWithMultipleStreams(column, //
-                                                 offset,
-                                                 limit,
-                                                 settings,
-                                                 state);
-    type->serializeBinaryBulkStateSuffix(settings, state);
+        IDataType::SerializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
 
-    compressed.next();
+        IDataType::SerializeBinaryBulkStatePtr state;
+        type->serializeBinaryBulkStatePrefix(settings, state);
+
+        type->serializeBinaryBulkWithMultipleStreams(column, //
+                                                     offset,
+                                                     limit,
+                                                     settings,
+                                                     state);
+        type->serializeBinaryBulkStateSuffix(settings, state);
+
+        compressed.next();
+    }
 }
 
 void deserializeColumn(IColumn & column, const DataTypePtr & type, const ByteBuffer & data_buf, size_t rows)
 {
-    ReadBufferFromMemory buf(data_buf.begin(), data_buf.size());
-    CompressedReadBuffer compressed(buf);
+    if (type->lowCardinality())
+    {
+        ReadBufferFromMemory buf(data_buf.begin(), data_buf.size());
+        UInt64 keys_size;
+        readVarUInt(keys_size, buf);
+        MemoryWriteBuffer buf_keys;
+        MemoryWriteBuffer buf_data;
+        copyData(buf, buf_keys, keys_size);
+        copyData(buf, buf_data);
 
-    IDataType::DeserializeBinaryBulkSettings settings;
-    settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
-    settings.avg_value_size_hint = (double)(data_buf.size()) / rows;
+        auto read_buf_keys = buf_keys.tryGetReadBuffer();
+        if (read_buf_keys == nullptr)
+        {
+            throw Exception("cannot happen");
+        }
+        auto read_buf_data = buf_data.tryGetReadBuffer();
+        if (read_buf_data == nullptr)
+        {
+            throw Exception("cannot happen");
+        }
 
-    IDataType::DeserializeBinaryBulkStatePtr state;
-    type->deserializeBinaryBulkStatePrefix(settings, state);
+        CompressedReadBuffer compressed_read_buf_keys(*read_buf_keys);
+        CompressedReadBuffer compressed_read_buf_data(*read_buf_data);
 
-    type->deserializeBinaryBulkWithMultipleStreams(column, //
-                                                   rows,
-                                                   settings,
-                                                   state);
+        IDataType::DeserializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath & path) {
+            if (path[0].type == IDataType::Substream::DictionaryKeys)
+            {
+                return &compressed_read_buf_keys;
+            } else {
+                return &compressed_read_buf_data;
+            }
+        };
+        settings.avg_value_size_hint = (double)(data_buf.size()) / rows;
+
+        IDataType::DeserializeBinaryBulkStatePtr state;
+        type->deserializeBinaryBulkStatePrefix(settings, state);
+
+        type->deserializeBinaryBulkWithMultipleStreams(column, //
+                                                       rows,
+                                                       settings,
+                                                       state);
+    }
+    else
+    {
+        ReadBufferFromMemory buf(data_buf.begin(), data_buf.size());
+        CompressedReadBuffer compressed(buf);
+
+        IDataType::DeserializeBinaryBulkSettings settings;
+        settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
+        settings.avg_value_size_hint = (double)(data_buf.size()) / rows;
+
+        IDataType::DeserializeBinaryBulkStatePtr state;
+        type->deserializeBinaryBulkStatePrefix(settings, state);
+
+        type->deserializeBinaryBulkWithMultipleStreams(column, //
+                                                       rows,
+                                                       settings,
+                                                       state);
+    }
 }
 
 inline void serializePack(const Pack & pack, const BlockPtr & schema, WriteBuffer & buf)

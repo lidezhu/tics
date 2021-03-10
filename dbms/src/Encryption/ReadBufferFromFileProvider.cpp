@@ -75,7 +75,10 @@ bool ReadBufferFromFileProvider::nextImpl()
     return true;
 }
 
-off_t ReadBufferFromFileProvider::doSeekInFile(off_t offset, int whence) { return file->seek(offset, whence); }
+off_t ReadBufferFromFileProvider::doSeekInFile(off_t offset, int whence)
+{
+    return file->seek(offset, whence);
+}
 
 ReadBufferFromFileProvider::~ReadBufferFromFileProvider()
 {

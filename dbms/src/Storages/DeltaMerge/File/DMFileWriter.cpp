@@ -76,7 +76,7 @@ void DMFileWriter::addStreams(ColId col_id, DataTypePtr type, bool do_index)
         auto       stream      = std::make_unique<Stream>(dmfile, //
                                                stream_name,
                                                type,
-                                               compression_settings,
+                                               CompressionSettings(CompressionMethod::NONE),
                                                max_compress_block_size,
                                                file_provider,
                                                rate_limiter,
@@ -329,11 +329,11 @@ void DMFileWriter::finalizeColumn(ColId col_id, DataTypePtr type)
 
 IDataType::OutputStreamGetter DMFileWriter::createStreamGetter(ColId col_id)
 {
-    return [&, this](const IDataType::SubstreamPath & substream) {
+    return [col_id, this](const IDataType::SubstreamPath & substream) {
         const auto stream_name = DMFile::getFileNameBase(col_id, substream);
         auto &     stream      = column_streams.at(stream_name);
         return &(stream->original_hashing);
-    };;
+    };
 }
 
 } // namespace DM

@@ -124,6 +124,11 @@ DMFileReader::Stream::Stream(DMFileReader & reader, //
 
     buffer_size = std::min(buffer_size, max_read_buffer_size);
 
+    if (buffer_size <= 0)
+    {
+        buffer_size = data_file_size;
+    }
+
     LOG_TRACE(log,
               "file size: " << data_file_size << ", estimated read size: " << estimated_size << ", buffer_size: " << buffer_size
                             << " (aio_threshold: " << aio_threshold << ", max_read_buffer_size: " << max_read_buffer_size << ")");
@@ -442,6 +447,7 @@ void DMFileReader::readFromDisk(
 
             return sub_stream->buf.get();
         };
+        settings.continuous_reading = !should_seek;
         auto & deserialize_state = deserialize_binary_bulk_state_map[column_define.id];
         data_type->deserializeBinaryBulkWithMultipleStreams(*column, read_rows, settings, deserialize_state);
         IDataType::updateAvgValueSizeHint(*column, top_stream->avg_size_hint);

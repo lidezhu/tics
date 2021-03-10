@@ -14,6 +14,7 @@
 #include <DataTypes/DataTypeDate.h>
 #include <DataTypes/DataTypeDateTime.h>
 #include <Parsers/IAST.h>
+#include <common/logger_useful.h>
 
 namespace DB
 {
@@ -662,6 +663,7 @@ void DataTypeLowCardinality::deserializeBinaryBulkWithMultipleStreams(
                 !global_dictionary || index_type.need_update_dictionary || low_cardinality_state->need_update_dictionary;
             if (index_type.need_global_dictionary && need_update_dictionary)
             {
+                LOG_DEBUG(&Poco::Logger::get("DMFileReader"), "read global dictionary, limit " << limit);
                 read_dictionary();
                 low_cardinality_state->need_update_dictionary = false;
             }

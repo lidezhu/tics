@@ -2,6 +2,7 @@
 #include <DataStreams/IBlockInputStream.h>
 #include <DataStreams/NativeBlockInputStream.h>
 #include <DataTypes/IDataType.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <Flash/Coprocessor/CHBlockChunkCodec.h>
 #include <IO/ReadBufferFromString.h>
 
@@ -31,7 +32,7 @@ void writeData(const IDataType & type, const ColumnPtr & column, WriteBuffer & o
     /** If there are columns-constants - then we materialize them.
       * (Since the data type does not know how to serialize / deserialize constants.)
       */
-    ColumnPtr full_column;
+    ColumnPtr full_column = column->convertToFullColumnIfLowCardinality();
 
     if (ColumnPtr converted = column->convertToFullColumnIfConst())
         full_column = converted;
@@ -42,7 +43,19 @@ void writeData(const IDataType & type, const ColumnPtr & column, WriteBuffer & o
     serialize_settings.getter = [&](const IDataType::SubstreamPath &) { return &ostr; };
     serialize_settings.low_cardinality_max_dictionary_size = 8192;
     IDataType::SerializeBinaryBulkStatePtr state;
-    type.serializeBinaryBulkWithMultipleStreams(*full_column, offset, limit, serialize_settings, state);
+    if (type.lowCardinality())
+    {
+        auto real_type = typeid_cast<const DataTypeLowCardinality &>(type).getDictionaryType();
+        real_type->serializeBinaryBulkStatePrefix(serialize_settings, state);
+        real_type->serializeBinaryBulkWithMultipleStreams(*full_column, offset, limit, serialize_settings, state);
+        real_type->serializeBinaryBulkStateSuffix(serialize_settings, state);
+    }
+    else
+    {
+        type.serializeBinaryBulkStatePrefix(serialize_settings, state);
+        type.serializeBinaryBulkWithMultipleStreams(*full_column, offset, limit, serialize_settings, state);
+        type.serializeBinaryBulkStateSuffix(serialize_settings, state);
+    }
 }
 
 void CHBlockChunkCodecStream::encode(const Block & block, size_t start, size_t end)

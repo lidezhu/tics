@@ -34,8 +34,8 @@ public:
     static MutablePtr create(Args &&... args) { return Base::create(std::forward<Args>(args)...); }
 
 
-    std::string getName() const override { return "ColumnWithDictionary"; }
-    const char * getFamilyName() const override { return "ColumnWithDictionary"; }
+    std::string getName() const override { return "ColumnLowCardinality"; }
+    const char * getFamilyName() const override { return "ColumnLowCardinality"; }
 
     ColumnPtr convertToFullColumn() const { return getDictionary().getNestedColumn()->index(getIndexes(), 0); }
     ColumnPtr convertToFullColumnIfLowCardinality() const override { return convertToFullColumn(); }

@@ -5,6 +5,7 @@
 #include <Common/TiFlashException.h>
 #include <DataTypes/DataTypeDecimal.h>
 #include <DataTypes/DataTypeEnum.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <DataTypes/DataTypeMyDate.h>
 #include <DataTypes/DataTypeMyDateTime.h>
 #include <DataTypes/DataTypeNullable.h>
@@ -256,8 +257,15 @@ void flashEnumColToArrowCol(
 void flashColToArrowCol(TiDBColumn & dag_column, const ColumnWithTypeAndName & flash_col, const tipb::FieldType & field_type,
     size_t start_index, size_t end_index)
 {
-    const IColumn * col = flash_col.column.get();
-    const IDataType * type = flash_col.type.get();
+    ColumnPtr column_ptr = flash_col.column;
+    DataTypePtr type_ptr = flash_col.type;
+    if (type_ptr->lowCardinality())
+    {
+        column_ptr = recursiveRemoveLowCardinality(flash_col.column);
+        type_ptr = recursiveRemoveLowCardinality(flash_col.type);
+    }
+    const IColumn * col = column_ptr.get();
+    const IDataType * type = type_ptr.get();
     const TiDB::ColumnInfo tidb_column_info = fieldTypeToColumnInfo(field_type);
 
     if (type->isNullable() && tidb_column_info.hasNotNullFlag())
