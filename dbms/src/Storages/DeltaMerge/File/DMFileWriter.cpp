@@ -76,7 +76,7 @@ void DMFileWriter::addStreams(ColId col_id, DataTypePtr type, bool do_index)
         auto       stream      = std::make_unique<Stream>(dmfile, //
                                                stream_name,
                                                type,
-                                               CompressionSettings(CompressionMethod::NONE),
+                                               compression_settings,
                                                max_compress_block_size,
                                                file_provider,
                                                rate_limiter,
