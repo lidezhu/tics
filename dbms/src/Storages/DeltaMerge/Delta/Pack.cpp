@@ -1,3 +1,5 @@
+#include <Columns/ColumnLowCardinality.h>
+#include <DataTypes/DataTypeLowCardinality.h>
 #include <IO/CompressedReadBuffer.h>
 #include <IO/CompressedWriteBuffer.h>
 #include <IO/MemoryReadWriteBuffer.h>
@@ -17,58 +19,29 @@ using PageReadFields = PageStorage::PageReadFields;
 
 void serializeColumn(MemoryWriteBuffer & buf, const IColumn & column, const DataTypePtr & type, size_t offset, size_t limit, bool compress)
 {
+
     CompressionMethod method = compress ? CompressionMethod::LZ4 : CompressionMethod::NONE;
+    CompressedWriteBuffer compressed(buf, CompressionSettings(method));
+
+    IDataType::SerializeBinaryBulkSettings settings;
+    settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
+
+    IDataType::SerializeBinaryBulkStatePtr state;
     if (type->lowCardinality())
     {
-        MemoryWriteBuffer buf_keys;
-        MemoryWriteBuffer buf_data;
-        CompressedWriteBuffer compressed_keys(buf_keys, CompressionSettings(method));
-        CompressedWriteBuffer compressed_data(buf_data, CompressionSettings(method));
-        IDataType::SerializeBinaryBulkSettings settings;
-        settings.getter = [&](const IDataType::SubstreamPath & path) {
-            if (path[0].type == IDataType::Substream::DictionaryKeys)
-            {
-                return &compressed_keys;
-            } else {
-                return &compressed_data;
-            }
-        };
+        auto real_column = column.convertToFullColumnIfLowCardinality();
+        auto real_type = typeid_cast<const DataTypeLowCardinality &>(*type).getDictionaryType();
+        real_type->serializeBinaryBulkStatePrefix(settings, state);
 
-        IDataType::SerializeBinaryBulkStatePtr state;
-        type->serializeBinaryBulkStatePrefix(settings, state);
-
-        type->serializeBinaryBulkWithMultipleStreams(column, //
+        real_type->serializeBinaryBulkWithMultipleStreams(*real_column, //
                                                      offset,
                                                      limit,
                                                      settings,
                                                      state);
-        type->serializeBinaryBulkStateSuffix(settings, state);
-        compressed_keys.next();
-        compressed_data.next();
-
-        UInt64 keys_size = buf_keys.count();
-        writeVarUInt(keys_size, buf);
-        auto read_buf_keys = buf_keys.tryGetReadBuffer();
-        if (read_buf_keys == nullptr)
-        {
-            throw Exception("cannot happen");
-        }
-        copyData(*read_buf_keys, buf);
-        auto read_buf_data = buf_data.tryGetReadBuffer();
-        if (read_buf_data == nullptr)
-        {
-            throw Exception("cannot happen");
-        }
-        copyData(*read_buf_data, buf);
+        real_type->serializeBinaryBulkStateSuffix(settings, state);
     }
     else
     {
-        CompressedWriteBuffer compressed(buf, CompressionSettings(method));
-
-        IDataType::SerializeBinaryBulkSettings settings;
-        settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
-
-        IDataType::SerializeBinaryBulkStatePtr state;
         type->serializeBinaryBulkStatePrefix(settings, state);
 
         type->serializeBinaryBulkWithMultipleStreams(column, //
@@ -78,72 +51,25 @@ void serializeColumn(MemoryWriteBuffer & buf, const IColumn & column, const Data
                                                      state);
         type->serializeBinaryBulkStateSuffix(settings, state);
 
-        compressed.next();
     }
+    compressed.next();
 }
 
 void deserializeColumn(IColumn & column, const DataTypePtr & type, const ByteBuffer & data_buf, size_t rows)
 {
-    if (type->lowCardinality())
-    {
-        ReadBufferFromMemory buf(data_buf.begin(), data_buf.size());
-        UInt64 keys_size;
-        readVarUInt(keys_size, buf);
-        MemoryWriteBuffer buf_keys;
-        MemoryWriteBuffer buf_data;
-        copyData(buf, buf_keys, keys_size);
-        copyData(buf, buf_data);
+    ReadBufferFromMemory buf(data_buf.begin(), data_buf.size());
+    CompressedReadBuffer compressed(buf);
 
-        auto read_buf_keys = buf_keys.tryGetReadBuffer();
-        if (read_buf_keys == nullptr)
-        {
-            throw Exception("cannot happen");
-        }
-        auto read_buf_data = buf_data.tryGetReadBuffer();
-        if (read_buf_data == nullptr)
-        {
-            throw Exception("cannot happen");
-        }
+    IDataType::DeserializeBinaryBulkSettings settings;
+    settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
+    settings.avg_value_size_hint = (double)(data_buf.size()) / rows;
+    IDataType::DeserializeBinaryBulkStatePtr state;
 
-        CompressedReadBuffer compressed_read_buf_keys(*read_buf_keys);
-        CompressedReadBuffer compressed_read_buf_data(*read_buf_data);
-
-        IDataType::DeserializeBinaryBulkSettings settings;
-        settings.getter = [&](const IDataType::SubstreamPath & path) {
-            if (path[0].type == IDataType::Substream::DictionaryKeys)
-            {
-                return &compressed_read_buf_keys;
-            } else {
-                return &compressed_read_buf_data;
-            }
-        };
-        settings.avg_value_size_hint = (double)(data_buf.size()) / rows;
-
-        IDataType::DeserializeBinaryBulkStatePtr state;
-        type->deserializeBinaryBulkStatePrefix(settings, state);
-
-        type->deserializeBinaryBulkWithMultipleStreams(column, //
-                                                       rows,
-                                                       settings,
-                                                       state);
-    }
-    else
-    {
-        ReadBufferFromMemory buf(data_buf.begin(), data_buf.size());
-        CompressedReadBuffer compressed(buf);
-
-        IDataType::DeserializeBinaryBulkSettings settings;
-        settings.getter = [&](const IDataType::SubstreamPath &) { return &compressed; };
-        settings.avg_value_size_hint = (double)(data_buf.size()) / rows;
-
-        IDataType::DeserializeBinaryBulkStatePtr state;
-        type->deserializeBinaryBulkStatePrefix(settings, state);
-
-        type->deserializeBinaryBulkWithMultipleStreams(column, //
-                                                       rows,
-                                                       settings,
-                                                       state);
-    }
+    type->deserializeBinaryBulkStatePrefix(settings, state);
+    type->deserializeBinaryBulkWithMultipleStreams(column, //
+                                                   rows,
+                                                   settings,
+                                                   state);
 }
 
 inline void serializePack(const Pack & pack, const BlockPtr & schema, WriteBuffer & buf)
@@ -355,7 +281,17 @@ Block readPackFromDisk(const PackPtr & pack, const PageReader & page_reader)
         auto   data_buf = page.getFieldData(index);
         auto & type     = schema.getByPosition(index).type;
         auto & column   = columns[index];
-        deserializeColumn(*column, type, data_buf, pack->rows);
+        if (type->lowCardinality())
+        {
+            auto nested_type = typeid_cast<const DataTypeLowCardinality &>(*type).getDictionaryType();
+            auto nested_column = nested_type->createColumn();
+            deserializeColumn(*nested_column, nested_type, data_buf, pack->rows);
+            typeid_cast<ColumnLowCardinality &>(*column).insertRangeFromFullColumn(*nested_column, 0, nested_column->size());
+        }
+        else
+        {
+            deserializeColumn(*column, type, data_buf, pack->rows);
+        }
     }
 
     return schema.cloneWithColumns(std::move(columns));
@@ -405,7 +341,17 @@ Columns readPackFromDisk(const PackPtr &       pack, //
         const auto & cd = column_defines[index];
         // Deserialize column by pack's schema
         auto [type, col_data] = pack->getDataTypeAndEmptyColumn(cd.id);
-        deserializeColumn(*col_data, type, data_buf, pack->rows);
+        if (type->lowCardinality())
+        {
+            auto nested_type = typeid_cast<const DataTypeLowCardinality &>(*type).getDictionaryType();
+            auto nested_column = nested_type->createColumn();
+            deserializeColumn(*nested_column, nested_type, data_buf, pack->rows);
+            typeid_cast<ColumnLowCardinality &>(*col_data).insertRangeFromFullColumn(*nested_column, 0, nested_column->size());
+        }
+        else
+        {
+            deserializeColumn(*col_data, type, data_buf, pack->rows);
+        }
 
         columns[index_in_read_columns] = convertColumnByColumnDefineIfNeed(type, std::move(col_data), cd);
     }
