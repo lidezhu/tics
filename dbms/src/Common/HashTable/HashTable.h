@@ -691,6 +691,14 @@ protected:
         emplaceNonZeroImpl(place_value, x, it, inserted, hash_value);
     }
 
+    /// Same but find place using object. Hack for ReverseIndex.
+    template <typename ObjectToCompareWith>
+    void ALWAYS_INLINE emplaceNonZero(Key x, iterator & it, bool & inserted, size_t hash_value, const ObjectToCompareWith & object)
+    {
+        size_t place_value = findCell(object, hash_value, grower.place(hash_value));
+        emplaceNonZeroImpl(place_value, x, it, inserted, hash_value);
+    }
+
 
 public:
     /// Insert a value. In the case of any more complex values, it is better to use the `emplace` function.
@@ -746,6 +754,13 @@ public:
             emplaceNonZero(x, it, inserted, hash_value);
     }
 
+    /// Same, but search position by object. Hack for ReverseIndex.
+    template <typename ObjectToCompareWith>
+    void ALWAYS_INLINE emplace(Key x, iterator & it, bool & inserted, size_t hash_value, const ObjectToCompareWith & object)
+    {
+        if (!emplaceIfZero(x, it, inserted, hash_value))
+            emplaceNonZero(x, it, inserted, hash_value, object);
+    }
 
     /// Copy the cell from another hash table. It is assumed that the cell is not zero, and also that there was no such key in the table yet.
     void ALWAYS_INLINE insertUniqueNonZero(const Cell * cell, size_t hash_value)
