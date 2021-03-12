@@ -261,7 +261,7 @@ void ColumnLowCardinality::getPermutation(bool reverse, size_t limit, int nan_di
     /// Get indexes per row in column_unique.
     std::vector<std::vector<size_t>> indexes_per_row(getDictionary().size());
     size_t indexes_size = getIndexes().size();
-    for (size_t row = 0; row < indexes_size; ++row)
+    for (size_t row = 0; row < unique_perm.size(); ++row)
         indexes_per_row[getIndexes().getUInt(row)].push_back(row);
 
     /// Replicate permutation.
@@ -349,6 +349,16 @@ ColumnLowCardinality::getMinimalDictionaryEncodedColumn(size_t offset, size_t li
     return {std::move(sub_keys), std::move(sub_indexes)};
 }
 
+ColumnPtr ColumnLowCardinality::countKeys() const
+{
+    const auto & nested_column = getDictionary().getNestedColumn();
+    size_t dict_size = nested_column->size();
+
+    auto counter = ColumnUInt64::create(dict_size, 0);
+    idx.countKeys(counter->getData());
+    return std::move(counter);
+}
+
 
 ColumnLowCardinality::Index::Index() : positions(ColumnUInt8::create()), size_of_type(sizeof(UInt8)) {}
 
@@ -424,6 +434,18 @@ typename ColumnVector<IndexType>::Container & ColumnLowCardinality::Index::getPo
 }
 
 template <typename IndexType>
+const typename ColumnVector<IndexType>::Container & ColumnLowCardinality::Index::getPositionsData() const
+{
+    const auto * positions_ptr = typeid_cast<const ColumnVector<IndexType> *>(positions.get());
+    if (!positions_ptr)
+        throw Exception("Invalid indexes type for ColumnWithDictionary."
+                        " Expected UInt" + toString(8 * sizeof(IndexType)) + ", got " + positions->getName(),
+                        ErrorCodes::LOGICAL_ERROR);
+
+    return positions_ptr->getData();
+}
+
+template <typename IndexType>
 void ColumnLowCardinality::Index::convertPositions()
 {
     auto convert = [&](auto x)
@@ -476,6 +498,19 @@ UInt64 ColumnLowCardinality::Index::getMaxPositionForCurrentType() const
     UInt64 value = 0;
     callForType([&](auto type) { value = std::numeric_limits<decltype(type)>::max(); }, size_of_type);
     return value;
+}
+
+size_t ColumnLowCardinality::Index::getPositionAt(size_t row) const
+{
+    size_t pos;
+    auto getPosition = [&](auto type)
+    {
+        using CurIndexType = decltype(type);
+        pos = getPositionsData<CurIndexType>()[row];
+    };
+
+    callForType(std::move(getPosition), size_of_type);
+    return pos;
 }
 
 void ColumnLowCardinality::Index::insertPosition(UInt64 position)
@@ -560,6 +595,18 @@ void ColumnLowCardinality::Index::checkSizeOfType()
     if (size_of_type != getSizeOfIndexType(*positions, size_of_type))
         throw Exception("Invalid size of type. Expected "  + toString(8 * size_of_type) +
                         ", but positions are " + positions->getName(), ErrorCodes::LOGICAL_ERROR);
+}
+
+void ColumnLowCardinality::Index::countKeys(ColumnUInt64::Container & counts) const
+{
+    auto counter = [&](auto x)
+    {
+        using CurIndexType = decltype(x);
+        auto & data = getPositionsData<CurIndexType>();
+        for (auto pos : data)
+            ++counts[pos];
+    };
+    callForType(std::move(counter), size_of_type);
 }
 
 
