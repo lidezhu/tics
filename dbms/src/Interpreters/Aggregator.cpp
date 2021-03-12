@@ -806,9 +806,10 @@ bool Aggregator::executeOnBlock(const Block & block, AggregatedDataVariants & re
                 aggregate_columns[i][j] = materialized_columns.back().get();
             }
 
-            if (auto * col_with_dict = typeid_cast<const ColumnLowCardinality *>(aggregate_columns[i][j]))
+            auto column_no_lc = recursiveRemoveLowCardinality(aggregate_columns[i][j]->getPtr());
+            if (column_no_lc.get() != aggregate_columns[i][j])
             {
-                materialized_columns.push_back(col_with_dict->convertToFullColumn());
+                materialized_columns.emplace_back(std::move(column_no_lc));
                 aggregate_columns[i][j] = materialized_columns.back().get();
             }
         }
