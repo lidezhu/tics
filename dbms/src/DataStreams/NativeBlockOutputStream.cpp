@@ -8,6 +8,8 @@
 #include <DataStreams/MarkInCompressedFile.h>
 #include <DataStreams/NativeBlockOutputStream.h>
 
+#include <DataTypes/DataTypeLowCardinality.h>
+
 #include <Common/typeid_cast.h>
 
 namespace DB
@@ -106,6 +108,12 @@ void NativeBlockOutputStream::write(const Block & block)
 
         /// Type
         String type_name = column.type->getName();
+        if (column.type->lowCardinality())
+        {
+            auto nested_type = recursiveRemoveLowCardinality(column.type);
+            type_name = nested_type->getName();
+        }
+
 
         /// For compatibility, we will not send explicit timezone parameter in DateTime data type
         ///  to older clients, that cannot understand it.
@@ -117,7 +125,16 @@ void NativeBlockOutputStream::write(const Block & block)
 
         /// Data
         if (rows)    /// Zero items of data is always represented as zero number of bytes.
-            writeData(*column.type, column.column, ostr, 0, 0);
+        {
+            auto real_type = column.type;
+            auto real_column = column.column;
+            if (real_type->lowCardinality())
+            {
+                real_type = recursiveRemoveLowCardinality(real_type);
+                real_column = recursiveRemoveLowCardinality(real_column);
+            }
+            writeData(*real_type, real_column, ostr, 0, 0);
+        }
 
         if (index_ostr)
         {
