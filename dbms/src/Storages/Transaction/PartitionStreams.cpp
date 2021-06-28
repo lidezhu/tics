@@ -104,7 +104,7 @@ static void writeRegionDataToStorage(
                 return false;
             region_decode_cost = watch.elapsedMilliseconds();
             GET_METRIC(metrics, tiflash_raft_write_data_to_storage_duration_seconds, type_decode).Observe(region_decode_cost / 1000.0);
-            LOG_DEBUG(log, FUNCTION_NAME << ": region decode cost " << region_decode_cost / 1000.0 << " seconds, decode rows " << block.rows());
+            LOG_DEBUG(log, FUNCTION_NAME << ": region decode cost " << region_decode_cost << " milliseconds, decode rows " << block.rows());
         }
 
         /// Write block into storage.
@@ -458,7 +458,7 @@ RegionPtrWithBlock::CachePtr GenRegionPreDecodeBlockData(const RegionPtr & regio
             return false;
         schema_version = storage->getTableInfo().schema_version;
         res_block = std::move(block);
-        GET_METRIC(metrics, tiflash_raft_write_data_to_storage_duration_seconds, type_decode).Observe(watch.elapsedSeconds());
+        GET_METRIC(metrics, tiflash_raft_write_data_to_storage_duration_seconds, type_decode2).Observe(watch.elapsedSeconds());
         return true;
     };
 
