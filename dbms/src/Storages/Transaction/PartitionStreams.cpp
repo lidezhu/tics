@@ -460,7 +460,8 @@ RegionPtrWithBlock::CachePtr GenRegionPreDecodeBlockData(const RegionPtr & regio
                 throw;
         }
         auto reader = RegionBlockReader(storage);
-        auto [block, ok] = reader.read(*data_list_read, force_decode);
+        std::vector<UInt64> times;
+        auto [block, ok] = reader.read(*data_list_read, force_decode, times);
         if (!ok)
             return false;
         schema_version = storage->getTableInfo().schema_version;
