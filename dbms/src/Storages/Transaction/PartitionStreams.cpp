@@ -336,9 +336,10 @@ RegionTable::ReadBlockByRegionRes RegionTable::readBlockByRegion(const TiDB::Tab
                               {
                                   bool ok = false;
                                   auto reader = RegionBlockReader(table_info, columns);
+                                  std::vector<UInt64> times;
                                   std::tie(block, ok) = reader.setStartTs(start_ts)
                                                             .setFilter(scan_filter)
-                                                            .read(column_names_to_read, data_list_read, /*force_decode*/ true);
+                                                            .read(column_names_to_read, data_list_read, /*force_decode*/ true, times);
                                   if (!ok)
                                       // TODO: Enrich exception message.
                                       throw Exception("Read region " + std::to_string(region->id()) + " of table "

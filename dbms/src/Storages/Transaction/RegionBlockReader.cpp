@@ -374,7 +374,6 @@ RegionBlockReader::RegionBlockReader(const TiDB::TableInfo & table_info_, const 
 std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_read, RegionDataReadInfoList & data_list, bool force_decode, std::vector<UInt64> & time)
 {
     Stopwatch watch;
-    auto log = &Logger::get("RegionBlockReader::read");
     auto delmark_col = ColumnUInt8::create();
     auto version_col = ColumnUInt64::create();
 
