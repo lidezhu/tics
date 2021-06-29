@@ -111,8 +111,9 @@ static void writeRegionDataToStorage(
 
             GET_METRIC(metrics, tiflash_raft_write_data_to_storage_duration_seconds, type_decode).Observe(region_decode_cost / 1000.0);
             LOG_DEBUG(log, FUNCTION_NAME << ": region decode cost " << region_decode_cost << " milliseconds, decode rows " << block.rows() << "raw data size " << data_list_read.size());
-            for (const auto & [pk, write_type, commit_ts, std::ignore] : data_list_read)
+            for (const auto & [pk, write_type, commit_ts, value_ptr] : data_list_read)
             {
+                std::ignore = value_ptr;
                 LOG_DEBUG(log, FUNCTION_NAME << "pk " << *pk << " write_type " << write_type << " commit_ts " << commit_ts);
             }
         }
