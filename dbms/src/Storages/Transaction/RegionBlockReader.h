@@ -116,12 +116,12 @@ public:
     ///
     /// `RegionBlockReader::read` is the common routine used by both 'flush' and 'read' processes of TXN engine (Delta-Tree, TXN-MergeTree),
     /// each of which will use carefully adjusted 'start_ts' and 'force_decode' with appropriate error handling/retry to get what they want.
-    std::tuple<Block, bool> read(const Names & column_names_to_read, RegionDataReadInfoList & data_list, bool force_decode);
+    std::tuple<Block, bool> read(const Names & column_names_to_read, RegionDataReadInfoList & data_list, bool force_decode, std::vector<UInt64> & time);
 
     ///  Read all columns from `data_list` as a block.
-    inline std::tuple<Block, bool> read(RegionDataReadInfoList & data_list, bool force_decode)
+    inline std::tuple<Block, bool> read(RegionDataReadInfoList & data_list, bool force_decode, std::vector<UInt64> & time)
     {
-        return read(columns.getNamesOfPhysical(), data_list, force_decode);
+        return read(columns.getNamesOfPhysical(), data_list, force_decode, time);
     }
 };
 

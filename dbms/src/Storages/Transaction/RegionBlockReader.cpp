@@ -371,7 +371,7 @@ RegionBlockReader::RegionBlockReader(const TiDB::TableInfo & table_info_, const 
     : table_info(table_info_), columns(columns_), scan_filter(nullptr)
 {}
 
-std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_read, RegionDataReadInfoList & data_list, bool force_decode)
+std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_read, RegionDataReadInfoList & data_list, bool force_decode, std::vector<UInt64> & time)
 {
     Stopwatch watch;
     auto log = &Logger::get("RegionBlockReader::read");
@@ -527,9 +527,12 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
             block.insert({std::move(column_map.getMutableColumnPtr(col_id)), column_map.getNameAndTypePair(col_id).type, name, col_id});
         }
     }
-    auto mark_point4_time = watch.elapsedMilliseconds();
-    LOG_DEBUG(log, "mark points time " << mark_point1_time << " ms " << mark_point2_time << " ms " << mark_point3_time << " ms " << mark_point4_time << "ms");
     column_map.checkValid();
+    auto mark_point4_time = watch.elapsedMilliseconds();
+    time.push_back(mark_point1_time);
+    time.push_back(mark_point2_time);
+    time.push_back(mark_point3_time);
+    time.push_back(mark_point4_time);
     return std::make_tuple(std::move(block), true);
 }
 
