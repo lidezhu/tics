@@ -475,8 +475,6 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
         ReorderRegionDataReadList(data_list);
     auto mark_point2_time = watch.elapsedMilliseconds();
 
-    LOG_DEBUG(log, "mark point 3 cost time " << watch.elapsedMilliseconds() << " ms");
-
     {
         auto func = setColumnValues<TMTPKType::UNSPECIFIED>;
 
@@ -510,8 +508,6 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
     }
     auto mark_point3_time = watch.elapsedMilliseconds();
 
-    LOG_DEBUG(log, "mark points time " << mark_point1_time << " ms " << mark_point2_time << " ms " << mark_point3_time << " ms ");
-
     Block block;
     for (const auto & name : column_names_to_read)
     {
@@ -531,7 +527,8 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
             block.insert({std::move(column_map.getMutableColumnPtr(col_id)), column_map.getNameAndTypePair(col_id).type, name, col_id});
         }
     }
-
+    auto mark_point4_time = watch.elapsedMilliseconds();
+    LOG_DEBUG(log, "mark points time " << mark_point1_time << " ms " << mark_point2_time << " ms " << mark_point3_time << " ms " << mark_point4_time << "ms");
     column_map.checkValid();
     return std::make_tuple(std::move(block), true);
 }
