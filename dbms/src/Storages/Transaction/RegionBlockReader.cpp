@@ -454,14 +454,12 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
         else
             visible_column_to_read_lut.emplace_back(col_id, i);
     }
-    LOG_DEBUG(log, "mark point 1 cost time " << watch.elapsedMilliseconds() << " ms");
 
     if (column_names_to_read.size() - MustHaveColCnt != visible_column_to_read_lut.size())
         throw Exception("schema doesn't contain needed columns.", ErrorCodes::LOGICAL_ERROR);
 
     std::sort(visible_column_to_read_lut.begin(), visible_column_to_read_lut.end());
-    LOG_DEBUG(log, "mark point 2 cost time " << watch.elapsedMilliseconds() << " ms");
-
+    auto mark_point1_time = watch.elapsedMilliseconds();
 
     if (!table_info.pk_is_handle)
     {
@@ -475,6 +473,8 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
 
     if (do_reorder_for_uint64_pk && pk_type == TMTPKType::UINT64)
         ReorderRegionDataReadList(data_list);
+    auto mark_point2_time = watch.elapsedMilliseconds();
+
     LOG_DEBUG(log, "mark point 3 cost time " << watch.elapsedMilliseconds() << " ms");
 
     {
@@ -508,7 +508,9 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
                 column_names_to_read.size() > MustHaveColCnt, table_info, force_decode, scan_filter))
             return std::make_tuple<Block, bool>({}, false);
     }
-    LOG_DEBUG(log, "mark point 4 cost time " << watch.elapsedMilliseconds() << " ms");
+    auto mark_point3_time = watch.elapsedMilliseconds();
+
+    LOG_DEBUG(log, "mark points time " << mark_point1_time << " ms " << mark_point2_time << " ms " << mark_point3_time << " ms ");
 
     Block block;
     for (const auto & name : column_names_to_read)
@@ -529,7 +531,6 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
             block.insert({std::move(column_map.getMutableColumnPtr(col_id)), column_map.getNameAndTypePair(col_id).type, name, col_id});
         }
     }
-    LOG_DEBUG(log, "mark point 5 cost time " << watch.elapsedMilliseconds() << " ms");
 
     column_map.checkValid();
     return std::make_tuple(std::move(block), true);
