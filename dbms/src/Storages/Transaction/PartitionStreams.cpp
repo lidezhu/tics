@@ -114,8 +114,6 @@ static void writeRegionDataToStorage(
             for (const auto & [pk, write_type, commit_ts, value_ptr] : data_list_read)
             {
                 LOG_DEBUG(log, FUNCTION_NAME << "pk " << *pk << " write_type " << write_type << " commit_ts " << commit_ts);
-                if (value_ptr)
-                    LOG_DEBUG(log, FUNCTION_NAME << " value " << *value_ptr);
             }
         }
 

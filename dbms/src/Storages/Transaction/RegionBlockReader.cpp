@@ -421,6 +421,7 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
             primary_key_column_pos_map[col.name] = i;
         }
     }
+    auto mark_point0_time = watch.elapsedMilliseconds();
 
     for (size_t i = 0; i < table_info.columns.size(); i++)
     {
@@ -528,6 +529,7 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
     }
     column_map.checkValid();
     auto mark_point4_time = watch.elapsedMilliseconds();
+    time.push_back(mark_point0_time);
     time.push_back(mark_point1_time);
     time.push_back(mark_point2_time);
     time.push_back(mark_point3_time);
