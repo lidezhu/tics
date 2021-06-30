@@ -376,6 +376,7 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
     Stopwatch watch;
     auto delmark_col = ColumnUInt8::create();
     auto version_col = ColumnUInt64::create();
+    auto mark_point0_time = watch.elapsedMilliseconds();
 
     /// use map to avoid linear search
     std::unordered_map<String, DataTypePtr> column_type_map;
@@ -421,7 +422,7 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
             primary_key_column_pos_map[col.name] = i;
         }
     }
-    auto mark_point0_time = watch.elapsedMilliseconds();
+    auto mark_point1_time = watch.elapsedMilliseconds();
 
     for (size_t i = 0; i < table_info.columns.size(); i++)
     {
@@ -459,7 +460,7 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
         throw Exception("schema doesn't contain needed columns.", ErrorCodes::LOGICAL_ERROR);
 
     std::sort(visible_column_to_read_lut.begin(), visible_column_to_read_lut.end());
-    auto mark_point1_time = watch.elapsedMilliseconds();
+    auto mark_point2_time = watch.elapsedMilliseconds();
 
     if (!table_info.pk_is_handle)
     {
@@ -473,7 +474,7 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
 
     if (do_reorder_for_uint64_pk && pk_type == TMTPKType::UINT64)
         ReorderRegionDataReadList(data_list);
-    auto mark_point2_time = watch.elapsedMilliseconds();
+    auto mark_point3_time = watch.elapsedMilliseconds();
 
     {
         auto func = setColumnValues<TMTPKType::UNSPECIFIED>;
@@ -506,7 +507,7 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
                 column_names_to_read.size() > MustHaveColCnt, table_info, force_decode, scan_filter))
             return std::make_tuple<Block, bool>({}, false);
     }
-    auto mark_point3_time = watch.elapsedMilliseconds();
+    auto mark_point4_time = watch.elapsedMilliseconds();
 
     Block block;
     for (const auto & name : column_names_to_read)
@@ -528,12 +529,13 @@ std::tuple<Block, bool> RegionBlockReader::read(const Names & column_names_to_re
         }
     }
     column_map.checkValid();
-    auto mark_point4_time = watch.elapsedMilliseconds();
+    auto mark_point5_time = watch.elapsedMilliseconds();
     time.push_back(mark_point0_time);
     time.push_back(mark_point1_time);
     time.push_back(mark_point2_time);
     time.push_back(mark_point3_time);
     time.push_back(mark_point4_time);
+    time.push_back(mark_point5_time);
     return std::make_tuple(std::move(block), true);
 }
 
