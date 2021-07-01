@@ -18,6 +18,7 @@
 #include <common/logger_useful.h>
 
 #if defined(OS_LINUX)
+#include <thread>
 #   include <sys/time.h>
 #   include <sys/resource.h>
 #endif
@@ -47,7 +48,8 @@ static void writeRegionDataToStorage(
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
 #if defined(OS_LINUX)
-    if (0 != setpriority(PRIO_PROCESS, thread_id, -20))
+    LOG_TRACE(log, "Setting nice to " << -20);
+    if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), -20))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::CANNOT_SET_THREAD_PRIORITY);
 #endif
 
@@ -184,7 +186,7 @@ static void writeRegionDataToStorage(
                 ErrorCodes::LOGICAL_ERROR);
     }
 #if defined(OS_LINUX)
-    if (0 != setpriority(PRIO_PROCESS, thread_id, 0))
+    if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), 0))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::CANNOT_SET_THREAD_PRIORITY);
 #endif
 }
