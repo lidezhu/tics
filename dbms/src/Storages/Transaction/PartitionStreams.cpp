@@ -17,11 +17,9 @@
 #include <Storages/Transaction/Utils.h>
 #include <common/logger_useful.h>
 
-#if defined(OS_LINUX)
 #include <thread>
-#   include <sys/time.h>
-#   include <sys/resource.h>
-#endif
+#include <sys/time.h>
+#include <sys/resource.h>
 
 namespace DB
 {
@@ -47,11 +45,9 @@ static void writeRegionDataToStorage(
     auto metrics = context.getTiFlashMetrics();
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
-#if defined(OS_LINUX)
     LOG_TRACE(log, "Setting " <<  std::this_thread::get_id() << " nice to " << -20);
     if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), -20))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::CANNOT_SET_THREAD_PRIORITY);
-#endif
 
     /// Declare lambda of atomic read then write to call multiple times.
     auto atomicReadWrite = [&](bool force_decode) {
@@ -185,10 +181,8 @@ static void writeRegionDataToStorage(
             throw Exception("Write region " + std::to_string(region->id()) + " to table " + std::to_string(table_id) + " failed",
                 ErrorCodes::LOGICAL_ERROR);
     }
-#if defined(OS_LINUX)
     if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), 0))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::CANNOT_SET_THREAD_PRIORITY);
-#endif
 }
 
 std::variant<RegionDataReadInfoList, RegionException::RegionReadStatus, LockInfoPtr> resolveLocksAndReadRegionData(
