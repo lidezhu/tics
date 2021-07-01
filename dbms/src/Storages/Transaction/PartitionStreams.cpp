@@ -47,7 +47,7 @@ static void writeRegionDataToStorage(
     UInt64 region_decode_cost = -1, write_part_cost = -1;
     LOG_TRACE(log, "Setting " <<  std::this_thread::get_id() << " nice to " << -20);
     if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), -20))
-        throwFromErrno("Cannot 'setpriority'", ErrorCodes::CANNOT_SET_THREAD_PRIORITY);
+        throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 
     /// Declare lambda of atomic read then write to call multiple times.
     auto atomicReadWrite = [&](bool force_decode) {
@@ -182,7 +182,7 @@ static void writeRegionDataToStorage(
                 ErrorCodes::LOGICAL_ERROR);
     }
     if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), 0))
-        throwFromErrno("Cannot 'setpriority'", ErrorCodes::CANNOT_SET_THREAD_PRIORITY);
+        throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 }
 
 std::variant<RegionDataReadInfoList, RegionException::RegionReadStatus, LockInfoPtr> resolveLocksAndReadRegionData(
