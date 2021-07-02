@@ -20,6 +20,8 @@
 #include <thread>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <unistd.h>
+#include <syscall.h>
 
 namespace DB
 {
@@ -45,8 +47,9 @@ static void writeRegionDataToStorage(
     auto metrics = context.getTiFlashMetrics();
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
-    LOG_TRACE(log, "Setting " <<  std::this_thread::get_id() << " nice to " << -20);
-    if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), -20))
+    uint64_t current_tid = syscall(SYS_gettid);
+    LOG_TRACE(log, "Setting " <<  current_tid << " nice to " << -20);
+    if (0 != setpriority(PRIO_PROCESS, current_tid, -20))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 
     /// Declare lambda of atomic read then write to call multiple times.
@@ -181,7 +184,7 @@ static void writeRegionDataToStorage(
             throw Exception("Write region " + std::to_string(region->id()) + " to table " + std::to_string(table_id) + " failed",
                 ErrorCodes::LOGICAL_ERROR);
     }
-    if (0 != setpriority(PRIO_PROCESS, std::this_thread::get_id(), 0))
+    if (0 != setpriority(PRIO_PROCESS, current_tid, 0))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 }
 
