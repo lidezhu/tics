@@ -67,12 +67,14 @@ static void writeRegionDataToStorage(
     constexpr auto FUNCTION_NAME = __FUNCTION__;
     const auto & tmt = context.getTMTContext();
     auto metrics = context.getTiFlashMetrics();
+    const auto & settings = context.getSettingsRef();
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
     LOG_DEBUG(log, "has capability " << hasLinuxCapability(CAP_SYS_NICE));
     uint64_t current_tid = syscall(SYS_gettid);
-    LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << -20);
-    if (0 != setpriority(PRIO_PROCESS, 0, -10))
+    auto nice = settings.os_thread_priority;
+    LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << nice);
+    if (0 != setpriority(PRIO_PROCESS, 0, nice))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 
     /// Declare lambda of atomic read then write to call multiple times.
@@ -144,11 +146,11 @@ static void writeRegionDataToStorage(
 
             GET_METRIC(metrics, tiflash_raft_write_data_to_storage_duration_seconds, type_decode).Observe(region_decode_cost / 1000.0);
             LOG_DEBUG(log, FUNCTION_NAME << ": region decode cost " << region_decode_cost << " milliseconds, decode rows " << block.rows() << "raw data size " << data_list_read.size() << " column size " << storage->getTableInfo().columns.size());
-            for (const auto & [pk, write_type, commit_ts, value_ptr] : data_list_read)
-            {
-                std::ignore = value_ptr;
-                LOG_DEBUG(log, FUNCTION_NAME << "pk " << *pk << " write_type " << write_type << " commit_ts " << commit_ts);
-            }
+//            for (const auto & [pk, write_type, commit_ts, value_ptr] : data_list_read)
+//            {
+//                std::ignore = value_ptr;
+//                LOG_DEBUG(log, FUNCTION_NAME << "pk " << *pk << " write_type " << write_type << " commit_ts " << commit_ts);
+//            }
         }
 
         /// Write block into storage.
