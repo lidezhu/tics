@@ -72,7 +72,7 @@ static void writeRegionDataToStorage(
     LOG_DEBUG(log, "has capability " << hasLinuxCapability(CAP_SYS_NICE));
     uint64_t current_tid = syscall(SYS_gettid);
     LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << -20);
-    if (0 != setpriority(PRIO_PROCESS, 0, 10))
+    if (0 != setpriority(PRIO_PROCESS, 0, -10))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 
     /// Declare lambda of atomic read then write to call multiple times.
