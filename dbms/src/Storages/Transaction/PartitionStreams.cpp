@@ -71,12 +71,13 @@ static void writeRegionDataToStorage(
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
     auto nice = settings.os_thread_priority;
+    uint64_t current_tid = 0;
     if (nice != 0)
     {
         LOG_DEBUG(log, "has capability " << hasLinuxCapability(CAP_SYS_NICE));
-        uint64_t current_tid = syscall(SYS_gettid);
+        current_tid = syscall(SYS_gettid);
         LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << nice);
-        if (0 != setpriority(PRIO_PROCESS, 0, nice))
+        if (0 != setpriority(PRIO_PROCESS, current_tid, nice))
             throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
     }
 
@@ -214,7 +215,7 @@ static void writeRegionDataToStorage(
     }
     if (nice != 0)
     {
-        if (0 != setpriority(PRIO_PROCESS, 0, 0))
+        if (0 != setpriority(PRIO_PROCESS, current_tid, 0))
             throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
     }
 }
