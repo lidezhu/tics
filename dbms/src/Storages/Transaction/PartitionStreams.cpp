@@ -49,7 +49,7 @@ static void writeRegionDataToStorage(
     UInt64 region_decode_cost = -1, write_part_cost = -1;
     uint64_t current_tid = syscall(SYS_gettid);
     LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << -20);
-    if (0 != setpriority(PRIO_PROCESS, 0, -20))
+    if (0 != setpriority(PRIO_PROCESS, 0, 10))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 
     /// Declare lambda of atomic read then write to call multiple times.
