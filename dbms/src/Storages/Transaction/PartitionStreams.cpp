@@ -48,7 +48,7 @@ static void writeRegionDataToStorage(
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
     uint64_t current_tid = syscall(SYS_gettid);
-    LOG_TRACE(log, "Setting " <<  current_tid << " nice to " << -20);
+    LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << -20);
     if (0 != setpriority(PRIO_PROCESS, current_tid, -20))
         throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
 
