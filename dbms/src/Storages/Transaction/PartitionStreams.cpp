@@ -70,12 +70,15 @@ static void writeRegionDataToStorage(
     const auto & settings = context.getSettingsRef();
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
-    LOG_DEBUG(log, "has capability " << hasLinuxCapability(CAP_SYS_NICE));
-    uint64_t current_tid = syscall(SYS_gettid);
     auto nice = settings.os_thread_priority;
-    LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << nice);
-    if (0 != setpriority(PRIO_PROCESS, 0, nice))
-        throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
+    if (nice != 0)
+    {
+        LOG_DEBUG(log, "has capability " << hasLinuxCapability(CAP_SYS_NICE));
+        uint64_t current_tid = syscall(SYS_gettid);
+        LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << nice);
+        if (0 != setpriority(PRIO_PROCESS, 0, nice))
+            throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
+    }
 
     /// Declare lambda of atomic read then write to call multiple times.
     auto atomicReadWrite = [&](bool force_decode) {
@@ -209,8 +212,11 @@ static void writeRegionDataToStorage(
             throw Exception("Write region " + std::to_string(region->id()) + " to table " + std::to_string(table_id) + " failed",
                 ErrorCodes::LOGICAL_ERROR);
     }
-    if (0 != setpriority(PRIO_PROCESS, 0, 0))
-        throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
+    if (nice != 0)
+    {
+        if (0 != setpriority(PRIO_PROCESS, 0, 0))
+            throwFromErrno("Cannot 'setpriority'", ErrorCodes::LOGICAL_ERROR);
+    }
 }
 
 std::variant<RegionDataReadInfoList, RegionException::RegionReadStatus, LockInfoPtr> resolveLocksAndReadRegionData(
