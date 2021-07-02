@@ -22,6 +22,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #include <syscall.h>
+#include <linux/capability.h>
 
 namespace DB
 {
@@ -38,6 +39,27 @@ extern const int ILLFORMAT_RAFT_ROW;
 extern const int TABLE_IS_DROPPED;
 } // namespace ErrorCodes
 
+static __user_cap_data_struct getCapabilities()
+{
+    /// See man getcap.
+    __user_cap_header_struct request{};
+    request.version = _LINUX_CAPABILITY_VERSION_1; /// It's enough to check just single CAP_NET_ADMIN capability we are interested.
+    request.pid = getpid();
+
+    __user_cap_data_struct response{};
+
+    /// Avoid dependency on 'libcap'.
+    if (0 != syscall(SYS_capget, &request, &response))
+        throwFromErrno("Cannot do 'capget' syscall", ErrorCodes::NETLINK_ERROR);
+
+    return response;
+}
+
+bool hasLinuxCapability(int cap)
+{
+    static __user_cap_data_struct capabilities = getCapabilities();
+    return (1 << cap) & capabilities.effective;
+}
 
 static void writeRegionDataToStorage(
     Context & context, const RegionPtrWithBlock & region, RegionDataReadInfoList & data_list_read, Logger * log)
@@ -47,6 +69,7 @@ static void writeRegionDataToStorage(
     auto metrics = context.getTiFlashMetrics();
     TableID table_id = region->getMappedTableID();
     UInt64 region_decode_cost = -1, write_part_cost = -1;
+    LOG_DEBUG(log, "has capability " << hasLinuxCapability(CAP_SYS_NICE));
     uint64_t current_tid = syscall(SYS_gettid);
     LOG_DEBUG(log, "Setting " <<  current_tid << " nice to " << -20);
     if (0 != setpriority(PRIO_PROCESS, 0, 10))
