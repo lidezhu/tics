@@ -1,0 +1,14 @@
+//
+// Created by linkmyth on 2021/10/14.
+//
+
+#ifndef CLICKHOUSE_DTFILEFOLDERMODEREADER_H
+#define CLICKHOUSE_DTFILEFOLDERMODEREADER_H
+
+
+class DTFileFolderModeReader {
+
+};
+
+
+#endif //CLICKHOUSE_DTFILEFOLDERMODEREADER_H

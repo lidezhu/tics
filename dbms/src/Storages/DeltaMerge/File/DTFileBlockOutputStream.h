@@ -1,0 +1,14 @@
+//
+// Created by linkmyth on 2021/10/14.
+//
+
+#ifndef CLICKHOUSE_DTFILEBLOCKOUTPUTSTREAM_H
+#define CLICKHOUSE_DTFILEBLOCKOUTPUTSTREAM_H
+
+
+class DTFileBlockOutputStream {
+
+};
+
+
+#endif //CLICKHOUSE_DTFILEBLOCKOUTPUTSTREAM_H
