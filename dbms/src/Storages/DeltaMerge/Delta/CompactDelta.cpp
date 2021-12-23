@@ -99,6 +99,8 @@ bool DeltaValueSpace::compact(DMContext & context)
                 bool schema_ok
                     = cur_task.to_compact.empty() || dp_block->getSchema() == cur_task.to_compact.back()->tryToBlock()->getSchema();
 
+                LOG_DEBUG(log, "cur_task_full " << cur_task_full << " pack rows " << pack->getRows() << " pack bytes "
+                          << pack->getBytes() << " small pack " << small_pack << " schema_ok " << schema_ok);
                 if (cur_task_full || !small_pack || !schema_ok)
                     packup_cur_task();
 
