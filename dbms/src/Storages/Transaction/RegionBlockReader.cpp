@@ -184,7 +184,8 @@ bool RegionBlockReader::readImpl(Block & block, const RegionDataReadInfoList & d
                         }
                         else
                         {
-                            throw Exception("Detected overflow value " + std::to_string(handle_value) + " when decoding pk column of type " + raw_pk_column->getName(),
+                            throw Exception("Detected overflow value " + std::to_string(handle_value) + " when decoding pk column[id="
+                                                + std::to_string(pk_column_ids[0]) + "] [type=" + raw_pk_column->getName() + "]",
                                             ErrorCodes::LOGICAL_ERROR);
                         }
                     }
