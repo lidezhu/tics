@@ -186,6 +186,7 @@ void MemTableSet::removeColumnFilesInFlushTask(const ColumnFileFlushTask & flush
         new_rows += (*column_file_iter)->getRows();
         new_bytes += (*column_file_iter)->getBytes();
         new_deletes += (*column_file_iter)->getDeletes();
+        column_file_iter++;
     }
     column_files.swap(new_column_files);
     rows = new_rows;
