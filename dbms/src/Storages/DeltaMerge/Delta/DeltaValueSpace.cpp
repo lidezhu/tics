@@ -187,8 +187,8 @@ bool DeltaValueSpace::flush(DMContext & context)
             delta_index = new_delta_index;
 
         LOG_DEBUG(log,
-                  simpleInfo() << " Flush end. Flushed " << flush_task->getTaskNum() << " column files, " << flush_task->getFlushRows() << " rows and " << flush_task->getFlushDeletes()
-                               << " deletes.");
+                  info() << " Flush end. Flushed " << flush_task->getTaskNum() << " column files, " << flush_task->getFlushRows() << " rows and " << flush_task->getFlushDeletes()
+                         << " deletes.");
     }
     return true;
 }

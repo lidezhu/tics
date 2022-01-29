@@ -35,9 +35,16 @@ DeltaSnapshotPtr DeltaValueSpace::createSnapshot(const DMContext & context, bool
 
 RowKeyRange DeltaValueSnapshot::getSquashDeleteRange() const
 {
-    auto delete_range1 = mem_table_snap->getSquashDeleteRange();
-    auto delete_range2 = persisted_files_snap->getSquashDeleteRange();
-    return delete_range1.merge(delete_range2);
+    if (mem_table_snap)
+    {
+        auto delete_range1 = mem_table_snap->getSquashDeleteRange();
+        auto delete_range2 = persisted_files_snap->getSquashDeleteRange();
+        return delete_range1.merge(delete_range2);
+    }
+    else
+    {
+        return persisted_files_snap->getSquashDeleteRange();
+    }
 }
 
 // ================================================
