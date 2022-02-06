@@ -65,7 +65,7 @@ DeltaValueReader::DeltaValueReader(
 
 DeltaValueReaderPtr DeltaValueReader::createNewReader(const ColumnDefinesPtr & new_col_defs)
 {
-    auto new_reader = new DeltaValueReader();
+    auto * new_reader = new DeltaValueReader();
     new_reader->delta_snap = delta_snap;
     new_reader->_compacted_delta_index = _compacted_delta_index;
     new_reader->persisted_files_reader = persisted_files_reader->createNewReader(new_col_defs);

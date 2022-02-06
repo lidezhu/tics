@@ -42,8 +42,8 @@ void DeltaValueSpace::abandon(DMContext & context)
 
 DeltaValueSpacePtr DeltaValueSpace::restore(DMContext & context, const RowKeyRange & segment_range, PageId id)
 {
-    auto persisted_file_set_ = ColumnFilePersistedSet::restore(context, segment_range, id);
-    return std::make_shared<DeltaValueSpace>(std::move(persisted_file_set_));
+    auto persisted_file_set = ColumnFilePersistedSet::restore(context, segment_range, id);
+    return std::make_shared<DeltaValueSpace>(std::move(persisted_file_set));
 }
 
 void DeltaValueSpace::saveMeta(WriteBatches & wbs) const

@@ -445,7 +445,7 @@ BlockInputStreamPtr Segment::getInputStreamForDataExport(const DMContext & dm_co
                                                          const SegmentSnapshotPtr & segment_snap,
                                                          const RowKeyRange & data_range,
                                                          size_t expected_block_size,
-                                                         bool reorgnize_block) const
+                                                         bool reorganize_block) const
 {
     RowKeyRanges data_ranges{data_range};
     auto read_info = getReadInfo(dm_context, columns_to_read, segment_snap, data_ranges);
@@ -462,7 +462,7 @@ BlockInputStreamPtr Segment::getInputStreamForDataExport(const DMContext & dm_co
 
 
     data_stream = std::make_shared<DMRowKeyFilterBlockInputStream<true>>(data_stream, data_ranges, 0);
-    if (reorgnize_block)
+    if (reorganize_block)
     {
         data_stream = std::make_shared<PKSquashingBlockInputStream<false>>(data_stream, EXTRA_HANDLE_COLUMN_ID, is_common_handle);
     }
@@ -898,7 +898,9 @@ std::optional<Segment::SplitInfo> Segment::prepareSplitLogical(DMContext & dm_co
         return {};
     }
 
-    GenPageId log_gen_page_id = std::bind(&StoragePool::newLogPageId, &storage_pool);
+    GenPageId log_gen_page_id = [&]() {
+        return storage_pool.newMetaPageId();
+    };
 
     DMFiles my_stable_files;
     DMFiles other_stable_files;

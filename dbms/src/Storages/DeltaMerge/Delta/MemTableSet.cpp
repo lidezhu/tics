@@ -165,7 +165,6 @@ void MemTableSet::removeColumnFilesInFlushTask(const ColumnFileFlushTask & flush
     if (unlikely(tasks.size() > column_files.size()))
         throw Exception("column_files num check failed", ErrorCodes::LOGICAL_ERROR);
 
-    ColumnFiles new_column_files;
     size_t flush_bytes = 0;
     auto column_file_iter = column_files.begin();
     for (const auto & task : tasks)
@@ -177,6 +176,7 @@ void MemTableSet::removeColumnFilesInFlushTask(const ColumnFileFlushTask & flush
         flush_bytes += task.column_file->getBytes();
         column_file_iter++;
     }
+    ColumnFiles new_column_files;
     size_t new_rows = 0;
     size_t new_bytes = 0;
     size_t new_deletes = 0;

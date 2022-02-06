@@ -14,7 +14,7 @@ class ConcatBlockInputStream : public IProfilingBlockInputStream
 {
 public:
     ConcatBlockInputStream(BlockInputStreams inputs_, const LogWithPrefixPtr & log_)
-        : log(getMPPTaskLog(log_, getName()))
+        : log(getMPPTaskLog(log_, "Concat"))
     {
         children.insert(children.end(), inputs_.begin(), inputs_.end());
         current_stream = children.begin();
@@ -27,8 +27,8 @@ public:
 protected:
     Block readImpl() override
     {
-        FilterPtr filter_;
-        return readImpl(filter_, false);
+        FilterPtr filter;
+        return readImpl(filter, false);
     }
 
     Block readImpl(FilterPtr & res_filter, bool return_filter) override
