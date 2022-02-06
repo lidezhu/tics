@@ -44,7 +44,7 @@ public:
         , expected_block_size(expected_block_size_)
         , is_raw(is_raw_)
         , do_range_filter_for_raw(do_range_filter_for_raw_)
-        , log(getMPPTaskLog(log_, getName()))
+        , log(getMPPTaskLog(log_, "DeltaMergeSegmentThread"))
     {
     }
 

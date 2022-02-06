@@ -168,7 +168,7 @@ Block ColumnFileTiny::readBlockForMinorCompaction(const PageReader & page_reader
         for (size_t index = 0; index < schema_ref.columns(); ++index)
         {
             auto data_buf = page.getFieldData(index);
-            auto & type = schema_ref.getByPosition(index).type;
+            const auto & type = schema_ref.getByPosition(index).type;
             auto & column = columns[index];
             deserializeColumn(*column, type, data_buf, rows);
         }

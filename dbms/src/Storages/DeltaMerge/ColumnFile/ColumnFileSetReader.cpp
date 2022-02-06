@@ -18,7 +18,7 @@ std::pair<size_t, size_t> findColumnFile(const ColumnFiles & column_files, size_
     {
         if (rows_count == rows_offset && deletes_count == deletes_offset)
             return {column_file_index, 0};
-        auto & column_file = column_files[column_file_index];
+        const auto & column_file = column_files[column_file_index];
 
         if (column_file->isDeleteRange())
         {
