@@ -71,9 +71,13 @@ public:
     {
         String levels_summary;
         for (size_t i = 0; i < persisted_files_levels.size(); i++)
-            levels_summary += fmt::format("[{}]: {}", i, persisted_files_levels[i].size());
+        {
+            levels_summary += fmt::format("[{}: {}]", i, persisted_files_levels[i].size());
+            if (i != persisted_files_levels.size() - 1)
+                levels_summary += ",";
+        }
 
-        return fmt::format("ColumnFilePersistedSet [{}][{}]: {} column files, {} rows, {} bytes, {} deletes",
+        return fmt::format("ColumnFilePersistedSet [{}][levels summary: {}]: {} column files, {} rows, {} bytes, {} deletes.",
                            metadata_id,
                            levels_summary,
                            persisted_files_count.load(),

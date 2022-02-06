@@ -438,9 +438,9 @@ ColumnFileSetSnapshotPtr ColumnFilePersistedSet::createSnapshot(const DMContext 
 
     size_t total_rows = 0;
     size_t total_deletes = 0;
-    for (const auto & level : persisted_files_levels)
+    for (auto level_it = persisted_files_levels.rbegin(); level_it != persisted_files_levels.rend(); level_it++)
     {
-        for (const auto & file : level)
+        for (const auto & file : *level_it)
         {
             if (auto * t = file->tryToTinyFile(); (t && t->getCache()))
             {
