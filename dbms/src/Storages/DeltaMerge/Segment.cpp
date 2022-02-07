@@ -1214,7 +1214,6 @@ SegmentPtr Segment::applyMerge(DMContext & dm_context, //
     auto [left_persisted_files, left_in_memory_files] = left->delta->checkHeadAndCloneTail(dm_context, merged_range, left_snap->delta->getColumnFilesInSnapshot(), wbs);
     auto [right_persisted_files, right_in_memory_files] = right->delta->checkHeadAndCloneTail(dm_context, merged_range, right_snap->delta->getColumnFilesInSnapshot(), wbs);
 
-
     // Created references to tail pages' pages in "log" storage, we need to write them down.
     wbs.writeLogAndData();
 

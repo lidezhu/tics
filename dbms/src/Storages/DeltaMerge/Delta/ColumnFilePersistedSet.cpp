@@ -164,9 +164,7 @@ ColumnFilePersisteds ColumnFilePersistedSet::checkHeadAndCloneTail(DMContext & c
 
     if (unlikely(!check_success))
     {
-        LOG_ERROR(log,
-                  info() << ", Delta Check head failed, unexpected size. head column files: " << columnFilesToString(head_column_files)
-                         << ", level details: " << levelsInfo());
+        LOG_FMT_ERROR(log, "{}, Delta Check head failed, unexpected size. head column files: {}, level details: {}", info(), columnFilesToString(head_column_files), levelsInfo());
         throw Exception("Check head failed, unexpected size", ErrorCodes::LOGICAL_ERROR);
     }
 
@@ -339,8 +337,8 @@ MinorCompactionPtr ColumnFilePersistedSet::pickUpMinorCompaction(DMContext & con
 
                 if (auto * t_file = file->tryToTinyFile(); t_file)
                 {
-                    bool cur_task_full = cur_task.total_rows >= context.delta_small_pack_rows;
-                    bool small_column_file = t_file->getRows() < context.delta_small_pack_rows;
+                    bool cur_task_full = cur_task.total_rows >= context.delta_small_column_file_rows;
+                    bool small_column_file = t_file->getRows() < context.delta_small_column_file_rows;
                     bool schema_ok = cur_task.to_compact.empty();
 
                     if (!schema_ok)
@@ -375,11 +373,12 @@ bool ColumnFilePersistedSet::installCompactionResults(const MinorCompactionPtr &
 {
     if (compaction->current_compaction_version != minor_compaction_version)
     {
-        LOG_WARNING(log, "Structure has been updated during compact");
+        LOG_FMT_WARNING(log, "Structure has been updated during compact");
         return false;
     }
     minor_compaction_version += 1;
     ColumnFilePersistedLevels new_persisted_files_levels;
+    // Copy column files in level range [0, compaction->compaction_src_level)
     for (size_t i = 0; i < compaction->compaction_src_level; i++)
     {
         auto & new_level = new_persisted_files_levels.emplace_back();
@@ -388,16 +387,16 @@ bool ColumnFilePersistedSet::installCompactionResults(const MinorCompactionPtr &
     }
     // Create a new empty level for `compaction_src_level` because all the column files is compacted to next level
     new_persisted_files_levels.emplace_back();
-
     // Add new file to the target level
     auto target_level = compaction->compaction_src_level + 1;
     auto & target_level_files = new_persisted_files_levels.emplace_back();
-    // clone the old column files in the target level first
+    // Copy the old column files in the target level first if exists
     if (persisted_files_levels.size() > target_level)
     {
         for (auto & column_file : persisted_files_levels[target_level])
             target_level_files.emplace_back(column_file);
     }
+    // Add the compaction result to new target level
     for (auto & task : compaction->tasks)
     {
         if (task.is_trivial_move)
@@ -405,8 +404,7 @@ bool ColumnFilePersistedSet::installCompactionResults(const MinorCompactionPtr &
         else
             target_level_files.push_back(task.result);
     }
-
-    // Append remaining levels
+    // Copy column files in level range [compaction->compaction_src_level + 1, +inf) if exists
     for (size_t i = target_level + 1; i < persisted_files_levels.size(); i++)
     {
         auto & new_level = new_persisted_files_levels.emplace_back();

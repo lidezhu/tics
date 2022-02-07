@@ -64,7 +64,7 @@ private:
 
     std::atomic<size_t> last_try_flush_rows = 0;
     std::atomic<size_t> last_try_flush_bytes = 0;
-    std::atomic<size_t> last_try_compact_packs = 0;
+    std::atomic<size_t> last_try_compact_column_files = 0;
     std::atomic<size_t> last_try_merge_delta_rows = 0;
     std::atomic<size_t> last_try_merge_delta_bytes = 0;
     std::atomic<size_t> last_try_split_rows = 0;
@@ -168,7 +168,7 @@ public:
 
     std::atomic<size_t> & getLastTryFlushRows() { return last_try_flush_rows; }
     std::atomic<size_t> & getLastTryFlushBytes() { return last_try_flush_bytes; }
-    std::atomic<size_t> & getLastTryCompactPacks() { return last_try_compact_packs; }
+    std::atomic<size_t> & getLastTryCompactColumnFiles() { return last_try_compact_column_files; }
     std::atomic<size_t> & getLastTryMergeDeltaRows() { return last_try_merge_delta_rows; }
     std::atomic<size_t> & getLastTryMergeDeltaBytes() { return last_try_merge_delta_bytes; }
     std::atomic<size_t> & getLastTrySplitRows() { return last_try_split_rows; }

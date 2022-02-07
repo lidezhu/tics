@@ -19,7 +19,7 @@ class MemTableSet : public std::enable_shared_from_this<MemTableSet>
     , private boost::noncopyable
 {
 private:
-    // to avoid serialize the same schema between continuous ColumnFileInMemory and ColumnFileTiny instance
+    /// To avoid serialize the same schema between continuous ColumnFileInMemory and ColumnFileTiny instance.
     BlockPtr last_schema;
 
     ColumnFiles column_files;

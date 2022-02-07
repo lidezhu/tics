@@ -115,12 +115,16 @@ public:
 
     size_t getCurrentFlushVersion() const { return flush_version; }
 
+    /// Check whether the task_flush_version is valid,
+    /// and if it is valid then increase the internal flush version.
     bool checkAndIncreaseFlushVersion(size_t task_flush_version);
 
     bool appendPersistedColumnFilesToLevel0(const ColumnFilePersisteds & column_files, WriteBatches & wbs);
 
+    /// Choose a level in which exists some small column files that can be compacted to a larger column file
     MinorCompactionPtr pickUpMinorCompaction(DMContext & context);
 
+    /// Update the metadata to commit the compaction results
     bool installCompactionResults(const MinorCompactionPtr & compaction, WriteBatches & wbs);
 
     ColumnFileSetSnapshotPtr createSnapshot(const DMContext & context);
