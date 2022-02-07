@@ -275,7 +275,7 @@ public:
     }
 
     // Only used when `is_update` is true
-    ColumnFiles & getHeadColumnFilesForCheck() const
+    ColumnFiles & getColumnFilesInSnapshot() const
     {
         if (unlikely(!is_update))
             throw Exception("Should not call this method when is_update is true", ErrorCodes::LOGICAL_ERROR);

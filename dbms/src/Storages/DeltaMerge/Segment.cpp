@@ -574,7 +574,7 @@ StableValueSpacePtr Segment::prepareMergeDelta(DMContext & dm_context,
                                                WriteBatches & wbs) const
 {
     LOG_FMT_INFO(log,
-                 "Segment [{}] prepare merge delta start. delta packs: {}, delta total rows: {}, delta total size: {}",
+                 "Segment [{}] prepare merge delta start. delta column files: {}, delta total rows: {}, delta total size: {}",
                  segment_id,
                  segment_snap->delta->getColumnFileCount(),
                  segment_snap->delta->getRows(),
@@ -604,7 +604,7 @@ SegmentPtr Segment::applyMergeDelta(DMContext & context,
 {
     LOG_FMT_INFO(log, "Before apply merge delta: {}", info());
 
-    auto [persisted_column_files, in_memory_files] = delta->checkHeadAndCloneTail(context, rowkey_range, segment_snap->delta->getHeadColumnFilesForCheck(), wbs);
+    auto [persisted_column_files, in_memory_files] = delta->checkHeadAndCloneTail(context, rowkey_range, segment_snap->delta->getColumnFilesInSnapshot(), wbs);
     // Created references to tail pages' pages in "log" storage, we need to write them down.
     wbs.writeLogAndData();
 
@@ -899,7 +899,7 @@ std::optional<Segment::SplitInfo> Segment::prepareSplitLogical(DMContext & dm_co
     }
 
     GenPageId log_gen_page_id = [&]() {
-        return storage_pool.newMetaPageId();
+        return storage_pool.newLogPageId();
     };
 
     DMFiles my_stable_files;
@@ -1067,7 +1067,7 @@ SegmentPair Segment::applySplit(DMContext & dm_context, //
     RowKeyRange my_range(rowkey_range.start, split_info.split_point, is_common_handle, rowkey_column_size);
     RowKeyRange other_range(split_info.split_point, rowkey_range.end, is_common_handle, rowkey_column_size);
     ColumnFiles empty_files;
-    ColumnFiles * head_files = split_info.is_logical ? &empty_files : &segment_snap->delta->getHeadColumnFilesForCheck();
+    ColumnFiles * head_files = split_info.is_logical ? &empty_files : &segment_snap->delta->getColumnFilesInSnapshot();
 
     auto [my_persisted_files, my_in_memory_files] = delta->checkHeadAndCloneTail(dm_context, my_range, *head_files, wbs);
     auto [other_persisted_files, other_in_memory_files] = delta->checkHeadAndCloneTail(dm_context, other_range, *head_files, wbs);
@@ -1211,8 +1211,8 @@ SegmentPtr Segment::applyMerge(DMContext & dm_context, //
 
     RowKeyRange merged_range(left->rowkey_range.start, right->rowkey_range.end, left->is_common_handle, left->rowkey_column_size);
 
-    auto [left_persisted_files, left_in_memory_files] = left->delta->checkHeadAndCloneTail(dm_context, merged_range, left_snap->delta->getHeadColumnFilesForCheck(), wbs);
-    auto [right_persisted_files, right_in_memory_files] = right->delta->checkHeadAndCloneTail(dm_context, merged_range, right_snap->delta->getHeadColumnFilesForCheck(), wbs);
+    auto [left_persisted_files, left_in_memory_files] = left->delta->checkHeadAndCloneTail(dm_context, merged_range, left_snap->delta->getColumnFilesInSnapshot(), wbs);
+    auto [right_persisted_files, right_in_memory_files] = right->delta->checkHeadAndCloneTail(dm_context, merged_range, right_snap->delta->getColumnFilesInSnapshot(), wbs);
 
 
     // Created references to tail pages' pages in "log" storage, we need to write them down.
