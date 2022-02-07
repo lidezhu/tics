@@ -124,7 +124,10 @@ ColumnFileSetSnapshotPtr MemTableSet::createSnapshot()
     }
 
     if (unlikely(total_rows != rows || total_deletes != deletes))
-        throw Exception("Rows and deletes check failed!", ErrorCodes::LOGICAL_ERROR);
+    {
+        LOG_FMT_ERROR(log, "{}: Rows and deletes check failed. Actual: rows[{}], deletes[{}]. Expected: rows[{}], deletes[{}].", __PRETTY_FUNCTION__, total_rows, total_deletes, rows.load(), deletes.load());
+        throw Exception("Rows and deletes check failed.", ErrorCodes::LOGICAL_ERROR);
+    }
 
     return snap;
 }
@@ -154,7 +157,10 @@ ColumnFileFlushTaskPtr MemTableSet::buildFlushTask(DMContext & context, size_t r
         cur_deletes_offset += column_file->getDeletes();
     }
     if (unlikely(flush_task->getFlushRows() != rows || flush_task->getFlushDeletes() != deletes))
-        throw Exception("Rows and deletes check failed", ErrorCodes::LOGICAL_ERROR);
+    {
+        LOG_FMT_ERROR(log, "{}: Rows and deletes check failed. Actual: rows[{}], deletes[{}]. Expected: rows[{}], deletes[{}].", __PRETTY_FUNCTION__, flush_task->getFlushRows(), flush_task->getFlushDeletes(), rows.load(), deletes.load());
+        throw Exception("Rows and deletes check failed.", ErrorCodes::LOGICAL_ERROR);
+    }
 
     return flush_task;
 }

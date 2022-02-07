@@ -74,8 +74,7 @@ void ColumnFilePersistedSet::checkColumnFiles(const ColumnFilePersistedLevels & 
 
     if (unlikely(new_rows != rows || new_deletes != deletes))
     {
-        LOG_ERROR(log,
-                  "Rows and deletes check failed. Current packs: " << columnFilesToString(flattenColumnFileLevels(new_column_file_levels)) << ", new packs: " << columnFilesToString(flattenColumnFileLevels(new_column_file_levels)));
+        LOG_FMT_ERROR(log, "{}: Rows and deletes check failed. Actual: rows[{}], deletes[{}]. Expected: rows[{}], deletes[{}]. Current column files: {}, new column files: {}.", __PRETTY_FUNCTION__, new_rows, new_deletes, rows.load(), deletes.load(), columnFilesToString(flattenColumnFileLevels(persisted_files_levels)), columnFilesToString(flattenColumnFileLevels(new_column_file_levels)));
         throw Exception("Rows and deletes check failed.", ErrorCodes::LOGICAL_ERROR);
     }
 }
@@ -438,6 +437,8 @@ ColumnFileSetSnapshotPtr ColumnFilePersistedSet::createSnapshot(const DMContext 
 
     size_t total_rows = 0;
     size_t total_deletes = 0;
+    // The read direction is from the last level to the first level,
+    // and in each level we read from the begin to the end.
     for (auto level_it = persisted_files_levels.rbegin(); level_it != persisted_files_levels.rend(); level_it++)
     {
         for (const auto & file : *level_it)
@@ -458,7 +459,10 @@ ColumnFileSetSnapshotPtr ColumnFilePersistedSet::createSnapshot(const DMContext 
     }
 
     if (unlikely(total_rows != rows || total_deletes != deletes))
-        throw Exception("Rows and deletes check failed!", ErrorCodes::LOGICAL_ERROR);
+    {
+        LOG_FMT_ERROR(log, "{}: Rows and deletes check failed. Actual: rows[{}], deletes[{}]. Expected: rows[{}], deletes[{}].", __PRETTY_FUNCTION__, total_rows, total_deletes, rows.load(), deletes.load());
+        throw Exception("Rows and deletes check failed.", ErrorCodes::LOGICAL_ERROR);
+    }
 
     return snap;
 }

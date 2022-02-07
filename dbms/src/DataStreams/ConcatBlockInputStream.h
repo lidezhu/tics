@@ -14,13 +14,16 @@ class ConcatBlockInputStream : public IProfilingBlockInputStream
 {
 public:
     ConcatBlockInputStream(BlockInputStreams inputs_, const LogWithPrefixPtr & log_)
-        : log(getMPPTaskLog(log_, "Concat"))
+        : log(getMPPTaskLog(log_, getNameImpl()))
     {
         children.insert(children.end(), inputs_.begin(), inputs_.end());
         current_stream = children.begin();
     }
 
-    String getName() const override { return "Concat"; }
+    String getName() const override { return getNameImpl(); }
+
+    // Add this function because static analysis forbids calling virtual function in constructor
+    inline String getNameImpl() const { return "Concat"; }
 
     Block getHeader() const override { return children.at(0)->getHeader(); }
 
