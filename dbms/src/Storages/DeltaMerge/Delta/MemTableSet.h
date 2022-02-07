@@ -56,7 +56,7 @@ public:
                            deletes.load());
     }
 
-    ColumnFiles cloneColumnFiles() { return column_files; }
+    ColumnFiles cloneColumnFiles(DMContext & context, const RowKeyRange & target_range, WriteBatches & wbs);
 
     size_t getColumnFileCount() const { return column_files.size(); }
     size_t getRows() const { return rows; }

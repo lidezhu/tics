@@ -90,7 +90,7 @@ public:
     String simpleInfo() const { return "Delta [" + DB::toString(persisted_file_set->getId()) + "]"; }
     String info() const
     {
-        return fmt::format("{}, {}", mem_table_set->info(), persisted_file_set->info());
+        return fmt::format("{}. {}", mem_table_set->info(), persisted_file_set->info());
     }
 
     bool getLock(Lock & lock) const

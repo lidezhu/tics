@@ -58,7 +58,7 @@ DeltaValueSpace::checkHeadAndCloneTail(DMContext & context,
                                        WriteBatches & wbs) const
 {
     auto tail_persisted_files = persisted_file_set->checkHeadAndCloneTail(context, target_range, head_column_files, wbs);
-    auto memory_files = mem_table_set->cloneColumnFiles();
+    auto memory_files = mem_table_set->cloneColumnFiles(context, target_range, wbs);
     return std::make_pair(std::move(tail_persisted_files), std::move(memory_files));
 }
 
