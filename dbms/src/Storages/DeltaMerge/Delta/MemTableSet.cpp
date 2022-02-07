@@ -62,7 +62,7 @@ ColumnFiles MemTableSet::cloneColumnFiles(DMContext & context, const RowKeyRange
             auto new_dr = dr->getDeleteRange().shrink(target_range);
             if (!new_dr.none())
             {
-                // Only use the available delete_range pack.
+                // Only use the available delete_range column file.
                 cloned_column_files.push_back(dr->cloneWith(new_dr));
             }
         }
@@ -70,14 +70,14 @@ ColumnFiles MemTableSet::cloneColumnFiles(DMContext & context, const RowKeyRange
         {
             auto new_column_file = b->clone();
 
-            // No matter or what, don't append to packs which cloned from old packs again.
-            // Because they could shared the same cache. And the cache can NOT be inserted from different packs in different delta.
+            // No matter or what, don't append to column files which cloned from old column file again.
+            // Because they could shared the same cache. And the cache can NOT be inserted from different column files in different delta.
             new_column_file->disableAppend();
             cloned_column_files.push_back(new_column_file);
         }
         else if (auto * t = column_file->tryToTinyFile(); t)
         {
-            // Use a newly created page_id to reference the data page_id of current pack.
+            // Use a newly created page_id to reference the data page_id of current column file.
             PageId new_data_page_id = context.storage_pool.newLogPageId();
             wbs.log.putRefPage(new_data_page_id, t->getDataPageId());
             auto new_column_file = t->cloneWith(new_data_page_id);

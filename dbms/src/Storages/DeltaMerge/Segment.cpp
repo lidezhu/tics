@@ -1217,7 +1217,6 @@ SegmentPtr Segment::applyMerge(DMContext & dm_context, //
     // Created references to tail pages' pages in "log" storage, we need to write them down.
     wbs.writeLogAndData();
 
-    /// Make sure saved packs are appended before unsaved packs.
     ColumnFilePersisteds merged_persisted_column_files = std::move(left_persisted_files);
     ColumnFiles merged_in_memory_files = std::move(left_in_memory_files);
 

@@ -185,7 +185,7 @@ ColumnFilePersisteds ColumnFilePersistedSet::checkHeadAndCloneTail(DMContext & c
             auto new_dr = d_file->getDeleteRange().shrink(target_range);
             if (!new_dr.none())
             {
-                // Only use the available delete_range pack.
+                // Only use the available delete_range column file.
                 cloned_tail.push_back(d_file->cloneWith(new_dr));
             }
         }
