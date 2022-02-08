@@ -396,7 +396,7 @@ bool ColumnFilePersistedSet::installCompactionResults(const MinorCompactionPtr &
     auto old_src_level_files_iter = old_src_level_files.begin();
     for (const auto & task : compaction->getTasks())
     {
-        for (auto & file : task.to_compact)
+        for (const auto & file : task.to_compact)
         {
             if (unlikely(old_src_level_files_iter == old_src_level_files.end()
                          || (file->getId() != (*old_src_level_files_iter)->getId())

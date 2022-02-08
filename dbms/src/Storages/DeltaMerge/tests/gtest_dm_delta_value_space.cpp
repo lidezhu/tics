@@ -392,6 +392,80 @@ TEST_F(DeltaValueSpaceTest, MinorCompaction)
         }
     }
 }
+
+TEST_F(DeltaValueSpaceTest, Restore)
+{
+    auto persisted_file_set = delta->getPersistedFileSet();
+    size_t total_rows_write = 0;
+    // write some column_file, flush and compact it
+    {
+        WriteBatches wbs(dmContext().storage_pool, dmContext().getWriteLimiter());
+        {
+            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, num_rows_write_per_batch, false);
+            delta->appendToCache(dmContext(), block, 0, block.rows());
+            total_rows_write += num_rows_write_per_batch;
+        }
+        {
+            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
+            auto tiny_file = ColumnFileTiny::writeColumnFile(dmContext(), block, 0, block.rows(), wbs);
+            wbs.writeLogAndData();
+            delta->appendColumnFile(dmContext(), tiny_file);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        {
+            delta->appendDeleteRange(dmContext(), RowKeyRange::fromHandleRange(HandleRange(0, num_rows_write_per_batch)));
+        }
+        delta->flush(dmContext());
+        delta->compact(dmContext());
+        // after compaction, the two ColumnFileTiny must be compacted to a large column file, so there are just two column files left.
+        ASSERT_EQ(delta->getColumnFileCount(), 2);
+    }
+    // write more data and flush it, and then there are two levels in the persisted_file_set
+    {
+        {
+            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
+            delta->appendToCache(dmContext(), block, 0, block.rows());
+            total_rows_write += num_rows_write_per_batch;
+        }
+        delta->flush(dmContext());
+        ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 2);
+        ASSERT_EQ(delta->getColumnFileCount(), 3);
+        ASSERT_EQ(delta->getRows(), total_rows_write);
+    }
+    // check the column file order remain the same after restore
+    {
+        Blocks old_delta_blocks;
+        {
+            auto old_delta_snapshot = delta->createSnapshot(dmContext(), false, CurrentMetrics::DT_SnapshotOfRead);
+            DeltaValueInputStream old_delta_stream(dmContext(), old_delta_snapshot, table_columns, RowKeyRange::newAll(false, 1));
+            old_delta_stream.readPrefix();
+            while (true)
+            {
+                auto block = old_delta_stream.read();
+                if (!block)
+                    break;
+                old_delta_blocks.push_back(std::move(block));
+            }
+            old_delta_stream.readSuffix();
+        }
+        Blocks new_delta_blocks;
+        {
+            auto new_delta = delta->restore(dmContext(), RowKeyRange::newAll(false, 1), delta_id);
+            auto new_delta_snapshot = new_delta->createSnapshot(dmContext(), false, CurrentMetrics::DT_SnapshotOfRead);
+            DeltaValueInputStream new_delta_stream(dmContext(), new_delta_snapshot, table_columns, RowKeyRange::newAll(false, 1));
+            new_delta_stream.readPrefix();
+            while (true)
+            {
+                auto block = new_delta_stream.read();
+                if (!block)
+                    break;
+                new_delta_blocks.push_back(std::move(block));
+            }
+            new_delta_stream.readSuffix();
+        }
+        assertBlocksEqual(old_delta_blocks, new_delta_blocks);
+    }
+}
 } // namespace tests
 } // namespace DM
 } // namespace DB
