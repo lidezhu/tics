@@ -473,84 +473,76 @@ TEST_F(DeltaValueSpaceTest, CheckHeadAndCloneTail)
     {
         // one column file in level 1
         {
-            {appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
-    total_rows_write += num_rows_write_per_batch;
-}
-{
-    appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
-    total_rows_write += num_rows_write_per_batch;
-}
-delta->flush(dmContext());
-delta->compact(dmContext());
-ASSERT_EQ(delta->getColumnFileCount(), 1);
-ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 2);
-} // namespace tests
-// one column files in level 2
-{
-    {
-        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
-        total_rows_write += num_rows_write_per_batch;
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        {
+            appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        delta->flush(dmContext());
+        delta->compact(dmContext());
+        ASSERT_EQ(delta->getColumnFileCount(), 1);
+        ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 2);
+        // one column files in level 2
+        {
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        {
+            appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        delta->flush(dmContext());
+        // compact two level 0 files to level 1
+        delta->compact(dmContext());
+        // compact two level 1 files to level 2
+        delta->compact(dmContext());
+        ASSERT_EQ(delta->getColumnFileCount(), 1);
+        ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
+        // one column files in level 1 and one column files in level 2
+        {
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        {
+            appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        delta->flush(dmContext());
+        delta->compact(dmContext());
+        ASSERT_EQ(delta->getColumnFileCount(), 2);
+        ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
+        // one column files in level 0, one column files in level 1 and one column files in level 2
+        {
+            appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        delta->flush(dmContext());
+        ASSERT_EQ(delta->getColumnFileCount(), 3);
+        ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
     }
     {
-        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
-        total_rows_write += num_rows_write_per_batch;
-    }
-    delta->flush(dmContext());
-    // compact two level 0 files to level 1
-    delta->compact(dmContext());
-    // compact two level 1 files to level 2
-    delta->compact(dmContext());
-    ASSERT_EQ(delta->getColumnFileCount(), 1);
-    ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
-}
-// one column files in level 1 and one column files in level 2
-{
-    {
-        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
-        total_rows_write += num_rows_write_per_batch;
-    }
-    {
-        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
-        total_rows_write += num_rows_write_per_batch;
-    }
-    delta->flush(dmContext());
-    delta->compact(dmContext());
-    ASSERT_EQ(delta->getColumnFileCount(), 2);
-    ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
-}
-// one column files in level 0, one column files in level 1 and one column files in level 2
-{
-    {
-        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
-        total_rows_write += num_rows_write_per_batch;
-    }
-    delta->flush(dmContext());
-    ASSERT_EQ(delta->getColumnFileCount(), 3);
-    ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
-}
-} // namespace DM
+        auto snapshot = delta->createSnapshot(dmContext(), true, CurrentMetrics::DT_SnapshotOfRead);
+        auto rows = snapshot->getRows();
+        ASSERT_EQ(rows, total_rows_write);
+        // write some more data after create snapshot
+        {
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+            total_rows_write += num_rows_write_per_batch;
+        }
+        delta->flush(dmContext());
+        {
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+        }
+        auto [persisted_column_files, in_memory_files] = delta->checkHeadAndCloneTail(dmContext(), RowKeyRange::newAll(false, 1), snapshot->getColumnFilesInSnapshot(), wbs);
+        wbs.writeLogAndData();
 
-{
-    auto snapshot = delta->createSnapshot(dmContext(), true, CurrentMetrics::DT_SnapshotOfRead);
-    auto rows = snapshot->getRows();
-    ASSERT_EQ(rows, total_rows_write);
-    // write some more data after create snapshot
-    {
-        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
-        total_rows_write += num_rows_write_per_batch;
+        ASSERT_EQ(persisted_column_files.size(), 1);
+        ASSERT_EQ(persisted_column_files[0]->getRows(), num_rows_write_per_batch);
+        ASSERT_EQ(in_memory_files.size(), 1);
+        ASSERT_EQ(in_memory_files[0]->getRows(), num_rows_write_per_batch);
     }
-    delta->flush(dmContext());
-    {
-        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
-    }
-    auto [persisted_column_files, in_memory_files] = delta->checkHeadAndCloneTail(dmContext(), RowKeyRange::newAll(false, 1), snapshot->getColumnFilesInSnapshot(), wbs);
-    wbs.writeLogAndData();
-
-    ASSERT_EQ(persisted_column_files.size(), 1);
-    ASSERT_EQ(persisted_column_files[0]->getRows(), num_rows_write_per_batch);
-    ASSERT_EQ(in_memory_files.size(), 1);
-    ASSERT_EQ(in_memory_files[0]->getRows(), num_rows_write_per_batch);
-}
 } // namespace DB
 } // namespace tests
 } // namespace DM
