@@ -246,6 +246,20 @@ TEST_F(DeltaValueSpaceTest, WriteRead)
     }
 }
 
+void appendBlockToDeltaValueSpace(DMContext & context, DeltaValueSpacePtr delta, size_t rows_start, size_t rows_num)
+{
+    Block block = DMTestEnv::prepareSimpleWriteBlock(rows_start, rows_start + rows_num, false);
+    delta->appendToCache(context, block, 0, block.rows());
+}
+
+void appendColumnFileToDeltaValueSpace(DMContext & context, DeltaValueSpacePtr delta, size_t rows_start, size_t rows_num, WriteBatches & wbs)
+{
+    Block block = DMTestEnv::prepareSimpleWriteBlock(rows_start, rows_start + rows_num, false);
+    auto tiny_file = ColumnFileTiny::writeColumnFile(context, block, 0, block.rows(), wbs);
+    wbs.writeLogAndData();
+    delta->appendColumnFile(context, tiny_file);
+}
+
 // Write data to MemTableSet when do flush at the same time
 TEST_F(DeltaValueSpaceTest, Flush)
 {
@@ -256,18 +270,14 @@ TEST_F(DeltaValueSpaceTest, Flush)
     // write some column_file
     {
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-            delta->appendToCache(dmContext(), block, 0, block.rows());
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
             total_rows_write += num_rows_write_per_batch;
         }
         {
             delta->appendDeleteRange(dmContext(), RowKeyRange::fromHandleRange(HandleRange(0, num_rows_write_per_batch)));
         }
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-            auto tiny_file = ColumnFileTiny::writeColumnFile(dmContext(), block, 0, block.rows(), wbs);
-            wbs.writeLogAndData();
-            delta->appendColumnFile(dmContext(), tiny_file);
+            appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
             total_rows_write += num_rows_write_per_batch;
         }
     }
@@ -282,8 +292,7 @@ TEST_F(DeltaValueSpaceTest, Flush)
     }
     // another thread write more data to the delta value space
     {
-        Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-        delta->appendToCache(dmContext(), block, 0, block.rows());
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
         total_rows_write += num_rows_write_per_batch;
     }
     // commit the flush task and check the status after flush
@@ -303,20 +312,15 @@ TEST_F(DeltaValueSpaceTest, MinorCompaction)
     // write some column_file and flush
     {
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, num_rows_write_per_batch, false);
-            delta->appendToCache(dmContext(), block, 0, block.rows());
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
             total_rows_write += num_rows_write_per_batch;
         }
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-            auto tiny_file = ColumnFileTiny::writeColumnFile(dmContext(), block, 0, block.rows(), wbs);
-            wbs.writeLogAndData();
-            delta->appendColumnFile(dmContext(), tiny_file);
+            appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
             total_rows_write += num_rows_write_per_batch;
         }
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-            delta->appendToCache(dmContext(), block, 0, block.rows());
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
             total_rows_write += num_rows_write_per_batch;
         }
         {
@@ -344,10 +348,9 @@ TEST_F(DeltaValueSpaceTest, MinorCompaction)
     }
     // another thread write more data to the delta value space and flush it
     {
-        Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-        delta->appendToCache(dmContext(), block, 0, block.rows());
-        delta->flush(dmContext());
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
         total_rows_write += num_rows_write_per_batch;
+        delta->flush(dmContext());
         ASSERT_EQ(delta->getUnsavedRows(), 0);
         ASSERT_EQ(persisted_file_set->getRows(), total_rows_write);
         ASSERT_EQ(persisted_file_set->getDeletes(), 1);
@@ -372,10 +375,9 @@ TEST_F(DeltaValueSpaceTest, MinorCompaction)
     {
         for (size_t i = 0; i < 20; i++)
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-            delta->appendToCache(dmContext(), block, 0, block.rows());
-            delta->flush(dmContext());
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
             total_rows_write += num_rows_write_per_batch;
+            delta->flush(dmContext());
             while (true)
             {
                 PageStorage::SnapshotPtr log_storage_snap = dmContext().storage_pool.log()->getSnapshot();
@@ -401,15 +403,11 @@ TEST_F(DeltaValueSpaceTest, Restore)
     {
         WriteBatches wbs(dmContext().storage_pool, dmContext().getWriteLimiter());
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, num_rows_write_per_batch, false);
-            delta->appendToCache(dmContext(), block, 0, block.rows());
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
             total_rows_write += num_rows_write_per_batch;
         }
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-            auto tiny_file = ColumnFileTiny::writeColumnFile(dmContext(), block, 0, block.rows(), wbs);
-            wbs.writeLogAndData();
-            delta->appendColumnFile(dmContext(), tiny_file);
+            appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
             total_rows_write += num_rows_write_per_batch;
         }
         {
@@ -423,8 +421,7 @@ TEST_F(DeltaValueSpaceTest, Restore)
     // write more data and flush it, and then there are two levels in the persisted_file_set
     {
         {
-            Block block = DMTestEnv::prepareSimpleWriteBlock(total_rows_write, total_rows_write + num_rows_write_per_batch, false);
-            delta->appendToCache(dmContext(), block, 0, block.rows());
+            appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
             total_rows_write += num_rows_write_per_batch;
         }
         delta->flush(dmContext());
@@ -466,6 +463,95 @@ TEST_F(DeltaValueSpaceTest, Restore)
         assertBlocksEqual(old_delta_blocks, new_delta_blocks);
     }
 }
+
+TEST_F(DeltaValueSpaceTest, CheckHeadAndCloneTail)
+{
+    auto persisted_file_set = delta->getPersistedFileSet();
+    size_t total_rows_write = 0;
+    WriteBatches wbs(dmContext().storage_pool, dmContext().getWriteLimiter());
+    // create three levels in persisted_file_set
+    {
+        // one column file in level 1
+        {
+            {appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+    total_rows_write += num_rows_write_per_batch;
+}
+{
+    appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+    total_rows_write += num_rows_write_per_batch;
+}
+delta->flush(dmContext());
+delta->compact(dmContext());
+ASSERT_EQ(delta->getColumnFileCount(), 1);
+ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 2);
+} // namespace tests
+// one column files in level 2
+{
+    {
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+        total_rows_write += num_rows_write_per_batch;
+    }
+    {
+        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+        total_rows_write += num_rows_write_per_batch;
+    }
+    delta->flush(dmContext());
+    // compact two level 0 files to level 1
+    delta->compact(dmContext());
+    // compact two level 1 files to level 2
+    delta->compact(dmContext());
+    ASSERT_EQ(delta->getColumnFileCount(), 1);
+    ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
+}
+// one column files in level 1 and one column files in level 2
+{
+    {
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+        total_rows_write += num_rows_write_per_batch;
+    }
+    {
+        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+        total_rows_write += num_rows_write_per_batch;
+    }
+    delta->flush(dmContext());
+    delta->compact(dmContext());
+    ASSERT_EQ(delta->getColumnFileCount(), 2);
+    ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
+}
+// one column files in level 0, one column files in level 1 and one column files in level 2
+{
+    {
+        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+        total_rows_write += num_rows_write_per_batch;
+    }
+    delta->flush(dmContext());
+    ASSERT_EQ(delta->getColumnFileCount(), 3);
+    ASSERT_EQ(persisted_file_set->getColumnFileLevelCount(), 3);
+}
+} // namespace DM
+
+{
+    auto snapshot = delta->createSnapshot(dmContext(), true, CurrentMetrics::DT_SnapshotOfRead);
+    auto rows = snapshot->getRows();
+    ASSERT_EQ(rows, total_rows_write);
+    // write some more data after create snapshot
+    {
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+        total_rows_write += num_rows_write_per_batch;
+    }
+    delta->flush(dmContext());
+    {
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+    }
+    auto [persisted_column_files, in_memory_files] = delta->checkHeadAndCloneTail(dmContext(), RowKeyRange::newAll(false, 1), snapshot->getColumnFilesInSnapshot(), wbs);
+    wbs.writeLogAndData();
+
+    ASSERT_EQ(persisted_column_files.size(), 1);
+    ASSERT_EQ(persisted_column_files[0]->getRows(), num_rows_write_per_batch);
+    ASSERT_EQ(in_memory_files.size(), 1);
+    ASSERT_EQ(in_memory_files[0]->getRows(), num_rows_write_per_batch);
+}
+} // namespace DB
 } // namespace tests
 } // namespace DM
 } // namespace DB
