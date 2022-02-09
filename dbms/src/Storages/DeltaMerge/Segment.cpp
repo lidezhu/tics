@@ -1486,7 +1486,7 @@ std::pair<DeltaIndexPtr, bool> Segment::ensurePlace(const DMContext & dm_context
 
     if (unlikely(my_placed_rows != delta_snap->getRows() || my_placed_deletes != delta_snap->getDeletes()))
     {
-        String items_info = "";
+        String items_info;
         for (auto & item : items)
         {
             if (item.isBlock())
