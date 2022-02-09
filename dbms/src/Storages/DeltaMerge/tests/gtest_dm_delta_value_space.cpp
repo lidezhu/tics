@@ -622,17 +622,27 @@ TEST_F(DeltaValueSpaceTest, ShouldPlace)
     size_t tso = 100;
     WriteBatches wbs(dmContext().storage_pool, dmContext().getWriteLimiter());
     appendBlockToDeltaValueSpace(dmContext(), delta, 0, num_rows_write_per_batch, tso);
-    auto snapshot = delta->createSnapshot(dmContext(), false, CurrentMetrics::DT_SnapshotOfRead);
-    auto reader = std::make_shared<DeltaValueReader>(
-        dmContext(),
-        snapshot,
-        table_columns,
-        RowKeyRange::newAll(false, 1));
-    ASSERT_TRUE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso + 1));
-    ASSERT_FALSE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso - 1));
-    delta->flush(dmContext());
-    ASSERT_TRUE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso + 1));
-    ASSERT_FALSE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso - 1));
+    {
+        auto snapshot = delta->createSnapshot(dmContext(), false, CurrentMetrics::DT_SnapshotOfRead);
+        auto reader = std::make_shared<DeltaValueReader>(
+            dmContext(),
+            snapshot,
+            table_columns,
+            RowKeyRange::newAll(false, 1));
+        ASSERT_TRUE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso + 1));
+        ASSERT_FALSE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso - 1));
+    }
+    {
+        delta->flush(dmContext());
+        auto snapshot = delta->createSnapshot(dmContext(), false, CurrentMetrics::DT_SnapshotOfRead);
+        auto reader = std::make_shared<DeltaValueReader>(
+            dmContext(),
+            snapshot,
+            table_columns,
+            RowKeyRange::newAll(false, 1));
+        ASSERT_TRUE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso + 1));
+        ASSERT_FALSE(reader->shouldPlace(dmContext(), snapshot->getSharedDeltaIndex(), RowKeyRange::newAll(false, 1), RowKeyRange::fromHandleRange(HandleRange(0, 100)), tso - 1));
+    }
 }
 } // namespace tests
 } // namespace DM
