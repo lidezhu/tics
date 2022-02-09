@@ -303,6 +303,8 @@ public:
 
     const auto & getStorageSnapshot() { return persisted_files_snap->getStorageSnapshot(); }
     const auto & getSharedDeltaIndex() { return shared_delta_index; }
+
+    String toString() const;
 };
 
 class DeltaValueReader

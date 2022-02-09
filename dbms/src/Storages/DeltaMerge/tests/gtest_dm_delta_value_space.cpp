@@ -103,6 +103,20 @@ protected:
     static constexpr size_t num_rows_write_per_batch = 100;
 };
 
+void appendBlockToDeltaValueSpace(DMContext & context, DeltaValueSpacePtr delta, size_t rows_start, size_t rows_num)
+{
+    Block block = DMTestEnv::prepareSimpleWriteBlock(rows_start, rows_start + rows_num, false);
+    delta->appendToCache(context, block, 0, block.rows());
+}
+
+void appendColumnFileToDeltaValueSpace(DMContext & context, DeltaValueSpacePtr delta, size_t rows_start, size_t rows_num, WriteBatches & wbs)
+{
+    Block block = DMTestEnv::prepareSimpleWriteBlock(rows_start, rows_start + rows_num, false);
+    auto tiny_file = ColumnFileTiny::writeColumnFile(context, block, 0, block.rows(), wbs);
+    wbs.writeLogAndData();
+    delta->appendColumnFile(context, tiny_file);
+}
+
 TEST_F(DeltaValueSpaceTest, WriteRead)
 {
     Blocks write_blocks;
@@ -244,20 +258,6 @@ TEST_F(DeltaValueSpaceTest, WriteRead)
             ASSERT_EQ(reader->readRows(columns, 0, total_rows_write, &read_range), 2 * num_rows_write_per_batch + num_rows_write_per_batch / 2);
         }
     }
-}
-
-void appendBlockToDeltaValueSpace(DMContext & context, DeltaValueSpacePtr delta, size_t rows_start, size_t rows_num)
-{
-    Block block = DMTestEnv::prepareSimpleWriteBlock(rows_start, rows_start + rows_num, false);
-    delta->appendToCache(context, block, 0, block.rows());
-}
-
-void appendColumnFileToDeltaValueSpace(DMContext & context, DeltaValueSpacePtr delta, size_t rows_start, size_t rows_num, WriteBatches & wbs)
-{
-    Block block = DMTestEnv::prepareSimpleWriteBlock(rows_start, rows_start + rows_num, false);
-    auto tiny_file = ColumnFileTiny::writeColumnFile(context, block, 0, block.rows(), wbs);
-    wbs.writeLogAndData();
-    delta->appendColumnFile(context, tiny_file);
 }
 
 // Write data to MemTableSet when do flush at the same time
@@ -543,7 +543,48 @@ TEST_F(DeltaValueSpaceTest, CheckHeadAndCloneTail)
         ASSERT_EQ(in_memory_files.size(), 1);
         ASSERT_EQ(in_memory_files[0]->getRows(), num_rows_write_per_batch);
     }
-} // namespace DB
+}
+TEST_F(DeltaValueSpaceTest, GetPlaceItems)
+{
+    size_t total_rows_write = 0;
+    WriteBatches wbs(dmContext().storage_pool, dmContext().getWriteLimiter());
+    // write some data to persisted_file_set and mem_table_set
+    {
+        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+        total_rows_write += num_rows_write_per_batch;
+        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+        total_rows_write += num_rows_write_per_batch;
+        appendColumnFileToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch, wbs);
+        total_rows_write += num_rows_write_per_batch;
+        delta->flush(dmContext());
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+        total_rows_write += num_rows_write_per_batch;
+    }
+    // read
+    {
+        auto snapshot = delta->createSnapshot(dmContext(), false, CurrentMetrics::DT_SnapshotOfRead);
+        auto rows = snapshot->getRows();
+        ASSERT_EQ(rows, total_rows_write);
+        // write some more data after create snapshot
+        appendBlockToDeltaValueSpace(dmContext(), delta, total_rows_write, num_rows_write_per_batch);
+        ASSERT_EQ(delta->getRows(true), total_rows_write + num_rows_write_per_batch);
+        auto reader = std::make_shared<DeltaValueReader>(
+            dmContext(),
+            snapshot,
+            table_columns,
+            RowKeyRange::newAll(false, 1));
+        auto place_items = reader->getPlaceItems(0, 0, snapshot->getRows(), snapshot->getDeletes());
+        ASSERT_EQ(place_items.size(), 2);
+        size_t total_place_rows = 0;
+        for (auto & item : place_items)
+        {
+            ASSERT_EQ(item.isBlock(), true);
+            auto block = item.getBlock();
+            total_place_rows += block.rows();
+        }
+        ASSERT_EQ(total_place_rows, total_rows_write);
+    }
+}
 } // namespace tests
 } // namespace DM
 } // namespace DB
