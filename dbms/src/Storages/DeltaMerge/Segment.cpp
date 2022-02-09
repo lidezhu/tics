@@ -1495,7 +1495,7 @@ std::pair<DeltaIndexPtr, bool> Segment::ensurePlace(const DMContext & dm_context
             }
             else
             {
-                items_info += "delete " + toString(item.getDeleteRange()) + " ";
+                items_info += "delete ";
             }
         }
         throw Exception(
