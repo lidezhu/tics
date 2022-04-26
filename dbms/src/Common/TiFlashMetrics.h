@@ -81,6 +81,7 @@ namespace DB
         F(type_run_mpp_task, {{"type", "run_mpp_task"}}, ExpBuckets{0.0005, 2, 30}))                                                      \
     M(tiflash_coprocessor_response_bytes, "Total bytes of response body", Counter)                                                        \
     M(tiflash_kvstore_region_data_memory_size, "Total region data memory size of tiflash kvstore", Gauge)                                 \
+    M(tiflash_kvstore_data_approx_cache_memory_size, "Total region data memory size of tiflash memory data", Gauge)                                 \
     M(tiflash_schema_version, "Current version of tiflash cached schema", Gauge)                                                          \
     M(tiflash_schema_applying, "Whether the schema is applying or not (holding lock)", Gauge)                                             \
     M(tiflash_schema_apply_count, "Total number of each kinds of apply", Counter, F(type_diff, {"type", "diff"}),                         \

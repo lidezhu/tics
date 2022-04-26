@@ -39,12 +39,15 @@ BackgroundService::BackgroundService(TMTContext & tmt_)
 
     kvstore_size_metric_handle = background_pool.addTask(
         [this] {
-            size_t data_size = 0;
-            tmt.getKVStore()->traverseRegions([&data_size](RegionID, const RegionPtr & region) {
-                data_size += region->dataSize();
+            size_t region_data_size = 0;
+            size_t memory_cache_size = 0;
+            tmt.getKVStore()->traverseRegions([&region_data_size, &memory_cache_size](RegionID, const RegionPtr & region) {
+                region_data_size += region->dataSize();
+                memory_cache_size += region->getApproxMemCacheInfo().second;
             });
-            GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(data_size);
-            LOG_FMT_INFO(log, "KVStore region data memory size is {}.", data_size);
+            GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(region_data_size);
+            GET_METRIC(tiflash_kvstore_data_approx_cache_memory_size).Set(memory_cache_size);
+            LOG_FMT_INFO(log, "KVStore region data memory size is {}, memory cache size is {}", region_data_size, memory_cache_size);
             return false;
         },
         false);
