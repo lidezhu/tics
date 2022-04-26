@@ -44,7 +44,8 @@ BackgroundService::BackgroundService(TMTContext & tmt_)
                 data_size += region->dataSize();
             });
             GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(data_size);
-            return false;
+            LOG_FMT_INFO(log, "KVStore region data memory size is {}.", data_size);
+            return true;
         },
         false);
 
