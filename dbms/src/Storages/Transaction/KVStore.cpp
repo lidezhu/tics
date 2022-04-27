@@ -446,14 +446,14 @@ EngineStoreApplyRes KVStore::handleAdminRaftCmd(raft_cmdpb::AdminRequest && requ
         const auto try_to_flush_region = [&tmt](const RegionPtr & region) {
             if (tmt.isBgFlushDisabled())
             {
-                try
-                {
-                    tmt.getRegionTable().tryFlushRegion(region, false);
-                }
-                catch (const Exception & e)
-                {
-                    tryLogCurrentException(__PRETTY_FUNCTION__);
-                }
+//                try
+//                {
+//                    tmt.getRegionTable().tryFlushRegion(region, false);
+//                }
+//                catch (const Exception & e)
+//                {
+//                    tryLogCurrentException(__PRETTY_FUNCTION__);
+//                }
             }
             else
             {
@@ -463,7 +463,7 @@ EngineStoreApplyRes KVStore::handleAdminRaftCmd(raft_cmdpb::AdminRequest && requ
         };
 
         const auto persist_and_sync = [&](const Region & region) {
-            tryFlushRegionCacheInStorage(tmt, region, log);
+//            tryFlushRegionCacheInStorage(tmt, region, log);
             persistRegion(region, region_task_lock, "admin raft cmd");
         };
 
