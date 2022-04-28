@@ -39,20 +39,20 @@ void RegionData::insert(ColumnFamilyType cf, TiKVKey && key, TiKVValue && value)
     {
     case ColumnFamilyType::Write:
     {
-        auto size_key = TiKVKey::copyFrom(key);
+        TiKVKey size_key = TiKVKey::copyFrom(key);
         auto [data_size, memory_size] = write_cf.insert(std::move(key), std::move(value));
         cf_data_size += data_size;
         total_memory_size += memory_size;
-        write_cf_memory_size.emplace(size_key, memory_size);
+        write_cf_memory_size.emplace(std::move(size_key), memory_size);
         return;
     }
     case ColumnFamilyType::Default:
     {
-        auto size_key = TiKVKey::copyFrom(key);
+        TiKVKey size_key = TiKVKey::copyFrom(key);
         auto [data_size, memory_size] = default_cf.insert(std::move(key), std::move(value));
         cf_data_size += data_size;
         total_memory_size += memory_size;
-        default_cf_memory_size.emplace(size_key, memory_size);
+        default_cf_memory_size.emplace(std::move(size_key), memory_size);
         return;
     }
     case ColumnFamilyType::Lock:
@@ -76,7 +76,7 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
         cf_data_size -= write_cf.remove(RegionWriteCFData::Key{pk, ts}, true);
         if (write_cf_memory_size.find(key) != write_cf_memory_size.end())
         {
-            total_memory_size -= write_cf_memory_size[key];
+            total_memory_size -= write_cf_memory_size.at(key);
             write_cf_memory_size.erase(key);
         }
         return;
@@ -90,7 +90,7 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
         cf_data_size -= default_cf.remove(RegionDefaultCFData::Key{pk, ts}, true);
         if (default_cf_memory_size.find(key) != default_cf_memory_size.end())
         {
-            total_memory_size -= default_cf_memory_size[key];
+            total_memory_size -= default_cf_memory_size.at(key);
             default_cf_memory_size.erase(key);
         }
         return;
@@ -119,14 +119,14 @@ RegionData::WriteCFIter RegionData::removeDataByWriteIt(const WriteCFIter & writ
         if (auto data_it = map.find({pk, decoded_val.prewrite_ts}); data_it != map.end())
         {
             cf_data_size -= RegionDefaultCFData::calcTiKVKeyValueSize(data_it->second);
-            total_memory_size -= default_cf_memory_size[*key];
+            total_memory_size -= default_cf_memory_size.at(*key);
             default_cf_memory_size.erase(*key);
             map.erase(data_it);
         }
     }
 
     cf_data_size -= RegionWriteCFData::calcTiKVKeyValueSize(write_it->second);
-    total_memory_size -= write_cf_memory_size[*key];
+    total_memory_size -= write_cf_memory_size.at(*key);
     write_cf_memory_size.erase(*key);
 
     return write_cf.getDataMut().erase(write_it);
@@ -198,11 +198,11 @@ void RegionData::splitInto(const RegionRange & range, RegionData & new_region_da
     size_t memory_size_changed = 0;
     for (auto iter = default_cf_memory_size.begin(); iter != default_cf_memory_size.end();)
     {
-        auto & key = iter->first;
+        const auto & key = iter->first;
         if (start_key.compare(key) <= 0 && end_key.compare(key) > 0)
         {
             memory_size_changed += iter->second;
-            new_region_data.default_cf_memory_size.emplace(iter->first, iter->second);
+            new_region_data.default_cf_memory_size.emplace(TiKVKey::copyFrom(iter->first), iter->second);
             iter = default_cf_memory_size.erase(iter);
         }
         else
@@ -210,11 +210,11 @@ void RegionData::splitInto(const RegionRange & range, RegionData & new_region_da
     }
     for (auto iter = write_cf_memory_size.begin(); iter != write_cf_memory_size.end();)
     {
-        auto & key = iter->first;
+        const auto & key = iter->first;
         if (start_key.compare(key) <= 0 && end_key.compare(key) > 0)
         {
             memory_size_changed += iter->second;
-            new_region_data.write_cf_memory_size.emplace(iter->first, iter->second);
+            new_region_data.write_cf_memory_size.emplace(TiKVKey::copyFrom(iter->first), iter->second);
             iter = write_cf_memory_size.erase(iter);
         }
         else
@@ -233,12 +233,12 @@ void RegionData::mergeFrom(const RegionData & ori_region_data)
     cf_data_size += size_changed;
     for (auto iter = ori_region_data.default_cf_memory_size.begin(); iter != ori_region_data.default_cf_memory_size.end(); iter++)
     {
-        default_cf_memory_size.emplace(iter->first, iter->second);
+        default_cf_memory_size.emplace(TiKVKey::copyFrom(iter->first), iter->second);
         total_memory_size += iter->second;
     }
     for (auto iter = ori_region_data.write_cf_memory_size.begin(); iter != ori_region_data.write_cf_memory_size.end();)
     {
-        write_cf_memory_size.emplace(iter->first, iter->second);
+        write_cf_memory_size.emplace(TiKVKey::copyFrom(iter->first), iter->second);
         total_memory_size += iter->second;
     }
 }
