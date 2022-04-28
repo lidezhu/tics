@@ -280,7 +280,6 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
     for (size_t i = 0; i < cmds.len; i++)
     {
         auto type = cmds.cmd_types[i];
-        auto cf = cmds.cmd_cf[i];
         switch (type)
         {
         case WriteCmdType::Put:
