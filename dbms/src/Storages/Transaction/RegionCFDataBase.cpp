@@ -241,7 +241,9 @@ size_t RegionCFDataBase<Trait>::deserialize(ReadBuffer & buf, RegionCFDataBase &
     {
         auto key = TiKVKey::deserialize(buf);
         auto value = TiKVValue::deserialize(buf);
-        cf_data_size += new_region_data.insert(std::move(key), std::move(value));
+        auto [data_size, memory_size] = new_region_data.insert(std::move(key), std::move(value));
+        cf_data_size += data_size;
+        std::ignore = memory_size;
     }
     return cf_data_size;
 }
