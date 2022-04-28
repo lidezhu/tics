@@ -243,6 +243,8 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(
     cmd_types.reserve(request.requests_size());
     cmd_cf.reserve(request.requests_size());
 
+    size_t cmd_size = 0;
+
     for (const auto & req : request.requests())
     {
         auto type = req.cmd_type();
@@ -254,17 +256,23 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(
             vals.push_back({req.put().value().data(), req.put().value().size()});
             cmd_types.push_back(WriteCmdType::Put);
             cmd_cf.push_back(NameToCF(req.put().cf()));
+            cmd_size += req.put().key().size() + 16;
+            cmd_size += req.put().value().size() + 16;
             break;
         case raft_cmdpb::CmdType::Delete:
             keys.push_back({req.delete_().key().data(), req.delete_().key().size()});
             vals.push_back({nullptr, 0});
             cmd_types.push_back(WriteCmdType::Del);
             cmd_cf.push_back(NameToCF(req.delete_().cf()));
+            cmd_size += req.put().key().size() + 16;
             break;
         default:
             throw Exception(fmt::format("Unsupport raft cmd {}", raft_cmdpb::CmdType_Name(type)), ErrorCodes::LOGICAL_ERROR);
         }
     }
+    cmd_size += cmd_types.size() * sizeof(WriteCmdType);
+    cmd_size += cmd_cf.size() * sizeof(ColumnFamilyType);
+    GET_METRIC(tiflash_kvstore_raft_command_size).Increment(cmd_size);
     return handleWriteRaftCmd(
         WriteCmdsView{.keys = keys.data(), .vals = vals.data(), .cmd_types = cmd_types.data(), .cmd_cf = cmd_cf.data(), .len = keys.size()},
         region_id,
