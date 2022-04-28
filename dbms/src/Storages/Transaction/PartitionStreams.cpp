@@ -345,7 +345,7 @@ void RegionTable::writeBlockByRegion(
         return;
 
     reportUpstreamLatency(*data_list_read);
-    writeRegionDataToStorage(context, region, *data_list_read, log);
+//    writeRegionDataToStorage(context, region, *data_list_read, log);
 
     RemoveRegionCommitCache(region, *data_list_read, lock_region);
 
