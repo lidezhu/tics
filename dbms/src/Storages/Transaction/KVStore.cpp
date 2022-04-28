@@ -308,6 +308,14 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
     }
 
     auto res = region->handleWriteRaftCmd(cmds, index, term, tmt);
+    size_t region_data_size = 0;
+    size_t region_data_memory_size = 0;
+    tmt.getKVStore()->traverseRegions([&region_data_size, &region_data_memory_size](RegionID, const RegionPtr & region) {
+        region_data_size += region->dataSize();
+        region_data_memory_size += region->memorySize();
+    });
+    GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(region_data_size);
+    GET_METRIC(tiflash_kvstore_region_data_consume_memory_size).Set(region_data_memory_size);
     return res;
 }
 
