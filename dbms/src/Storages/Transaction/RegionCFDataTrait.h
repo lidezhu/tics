@@ -38,17 +38,35 @@ struct RegionWriteCFDataTrait
     using Value = std::tuple<std::shared_ptr<const TiKVKey>, std::shared_ptr<const TiKVValue>, DecodedWriteCFValue>;
     using Map = std::map<Key, Value>;
 
-    static std::optional<Map::value_type> genKVPair(TiKVKey && key, const DecodedTiKVKey & raw_key, TiKVValue && value)
+    static std::pair<std::optional<Map::value_type>, size_t> genKVPair(TiKVKey && key, const DecodedTiKVKey & raw_key, TiKVValue && value)
     {
         auto decoded_val = RecordKVFormat::decodeWriteCfValue(value);
         if (!decoded_val)
-            return std::nullopt;
+            return std::pair(std::nullopt, 0);
 
         RawTiDBPK tidb_pk = RecordKVFormat::getRawTiDBPK(raw_key);
         Timestamp ts = RecordKVFormat::getTs(key);
-        return Map::value_type(Key(std::move(tidb_pk), ts),
+
+        size_t memory_size = 0;
+        memory_size += key.capacity();
+        memory_size += raw_key.capacity();
+        memory_size += value.capacity();
+        memory_size += sizeof(decoded_val);
+        memory_size += sizeof(RecordKVFormat::InnerDecodedWriteCFValue);
+        memory_size += sizeof(decoded_val->short_value);
+        memory_size += decoded_val->short_value->capacity();
+        memory_size += sizeof(tidb_pk);
+        memory_size += tidb_pk->capacity();
+        memory_size += sizeof(ts);
+        memory_size += sizeof(Key);
+        memory_size += sizeof(Value);
+        memory_size += sizeof(std::shared_ptr<const TiKVKey>);
+        memory_size += sizeof(std::shared_ptr<const TiKVValue>);
+        memory_size += sizeof(Map::value_type);
+
+        return std::make_pair(Map::value_type(Key(std::move(tidb_pk), ts),
             Value(std::make_shared<const TiKVKey>(std::move(key)), std::make_shared<const TiKVValue>(std::move(value)),
-                std::move(*decoded_val)));
+                std::move(*decoded_val))), memory_size);
     }
 
     static const std::shared_ptr<const TiKVValue> & getRecordRawValuePtr(const Value & value) { return std::get<2>(value).short_value; }
@@ -63,12 +81,24 @@ struct RegionDefaultCFDataTrait
     using Value = std::tuple<std::shared_ptr<const TiKVKey>, std::shared_ptr<const TiKVValue>>;
     using Map = std::map<Key, Value>;
 
-    static std::optional<Map::value_type> genKVPair(TiKVKey && key, const DecodedTiKVKey & raw_key, TiKVValue && value)
+    static std::pair<std::optional<Map::value_type>, size_t> genKVPair(TiKVKey && key, const DecodedTiKVKey & raw_key, TiKVValue && value)
     {
         RawTiDBPK tidb_pk = RecordKVFormat::getRawTiDBPK(raw_key);
         Timestamp ts = RecordKVFormat::getTs(key);
-        return Map::value_type(Key(std::move(tidb_pk), ts),
-            Value(std::make_shared<const TiKVKey>(std::move(key)), std::make_shared<const TiKVValue>(std::move(value))));
+        size_t memory_size = 0;
+        memory_size += key.capacity();
+        memory_size += raw_key.capacity();
+        memory_size += value.capacity();
+        memory_size += sizeof(tidb_pk);
+        memory_size += tidb_pk->capacity();
+        memory_size += sizeof(ts);
+        memory_size += sizeof(Key);
+        memory_size += sizeof(Value);
+        memory_size += sizeof(std::shared_ptr<const TiKVKey>);
+        memory_size += sizeof(std::shared_ptr<const TiKVValue>);
+        memory_size += sizeof(Map::value_type);
+        return std::make_pair(Map::value_type(Key(std::move(tidb_pk), ts),
+            Value(std::make_shared<const TiKVKey>(std::move(key)), std::make_shared<const TiKVValue>(std::move(value)))), memory_size);
     }
 
     static std::shared_ptr<const TiKVValue> getTiKVValue(const Map::const_iterator & it) { return std::get<1>(it->second); }

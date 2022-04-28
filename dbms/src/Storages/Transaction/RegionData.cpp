@@ -17,6 +17,7 @@
 #include <Storages/Transaction/ColumnFamily.h>
 #include <Storages/Transaction/RegionData.h>
 #include <Storages/Transaction/RegionLockInfo.h>
+#include <Storages/Transaction/RegionRangeKeys.h>
 
 namespace DB
 {
@@ -38,12 +39,20 @@ void RegionData::insert(ColumnFamilyType cf, TiKVKey && key, TiKVValue && value)
     {
     case ColumnFamilyType::Write:
     {
-        cf_data_size += write_cf.insert(std::move(key), std::move(value));
+        auto size_key = TiKVKey::copyFrom(key);
+        auto [data_size, memory_size] = write_cf.insert(std::move(key), std::move(value));
+        cf_data_size += data_size;
+        total_memory_size += memory_size;
+        write_cf_memory_size.emplace(size_key, memory_size);
         return;
     }
     case ColumnFamilyType::Default:
     {
-        cf_data_size += default_cf.insert(std::move(key), std::move(value));
+        auto size_key = TiKVKey::copyFrom(key);
+        auto [data_size, memory_size] = default_cf.insert(std::move(key), std::move(value));
+        cf_data_size += data_size;
+        total_memory_size += memory_size;
+        default_cf_memory_size.emplace(size_key, memory_size);
         return;
     }
     case ColumnFamilyType::Lock:
@@ -65,6 +74,11 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
         Timestamp ts = RecordKVFormat::getTs(key);
         // removed by gc, may not exist.
         cf_data_size -= write_cf.remove(RegionWriteCFData::Key{pk, ts}, true);
+        if (write_cf_memory_size.find(key) != write_cf_memory_size.end())
+        {
+            total_memory_size -= write_cf_memory_size[key];
+            write_cf_memory_size.erase(key);
+        }
         return;
     }
     case ColumnFamilyType::Default:
@@ -74,6 +88,11 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
         Timestamp ts = RecordKVFormat::getTs(key);
         // removed by gc, may not exist.
         cf_data_size -= default_cf.remove(RegionDefaultCFData::Key{pk, ts}, true);
+        if (default_cf_memory_size.find(key) != default_cf_memory_size.end())
+        {
+            total_memory_size -= default_cf_memory_size[key];
+            default_cf_memory_size.erase(key);
+        }
         return;
     }
     case ColumnFamilyType::Lock:
@@ -100,11 +119,15 @@ RegionData::WriteCFIter RegionData::removeDataByWriteIt(const WriteCFIter & writ
         if (auto data_it = map.find({pk, decoded_val.prewrite_ts}); data_it != map.end())
         {
             cf_data_size -= RegionDefaultCFData::calcTiKVKeyValueSize(data_it->second);
+            total_memory_size -= default_cf_memory_size[*key];
+            default_cf_memory_size.erase(*key);
             map.erase(data_it);
         }
     }
 
     cf_data_size -= RegionWriteCFData::calcTiKVKeyValueSize(write_it->second);
+    total_memory_size -= write_cf_memory_size[*key];
+    write_cf_memory_size.erase(*key);
 
     return write_cf.getDataMut().erase(write_it);
 }
@@ -161,6 +184,7 @@ DecodedLockCFValuePtr RegionData::getLockInfo(const RegionLockReadQuery & query)
     return nullptr;
 }
 
+using RegionRange = std::pair<TiKVRangeKey, TiKVRangeKey>;
 void RegionData::splitInto(const RegionRange & range, RegionData & new_region_data)
 {
     size_t size_changed = 0;
@@ -169,6 +193,35 @@ void RegionData::splitInto(const RegionRange & range, RegionData & new_region_da
     size_changed += lock_cf.splitInto(range, new_region_data.lock_cf);
     cf_data_size -= size_changed;
     new_region_data.cf_data_size += size_changed;
+
+    const auto & [start_key, end_key] = range;
+    size_t memory_size_changed = 0;
+    for (auto iter = default_cf_memory_size.begin(); iter != default_cf_memory_size.end();)
+    {
+        auto & key = iter->first;
+        if (start_key.compare(key) <= 0 && end_key.compare(key) > 0)
+        {
+            memory_size_changed += iter->second;
+            new_region_data.default_cf_memory_size.emplace(iter->first, iter->second);
+            iter = default_cf_memory_size.erase(iter);
+        }
+        else
+            ++iter;
+    }
+    for (auto iter = write_cf_memory_size.begin(); iter != write_cf_memory_size.end();)
+    {
+        auto & key = iter->first;
+        if (start_key.compare(key) <= 0 && end_key.compare(key) > 0)
+        {
+            memory_size_changed += iter->second;
+            new_region_data.write_cf_memory_size.emplace(iter->first, iter->second);
+            iter = write_cf_memory_size.erase(iter);
+        }
+        else
+            ++iter;
+    }
+    total_memory_size -= memory_size_changed;
+    new_region_data.total_memory_size = memory_size_changed;
 }
 
 void RegionData::mergeFrom(const RegionData & ori_region_data)
@@ -178,6 +231,16 @@ void RegionData::mergeFrom(const RegionData & ori_region_data)
     size_changed += write_cf.mergeFrom(ori_region_data.write_cf);
     size_changed += lock_cf.mergeFrom(ori_region_data.lock_cf);
     cf_data_size += size_changed;
+    for (auto iter = ori_region_data.default_cf_memory_size.begin(); iter != ori_region_data.default_cf_memory_size.end(); iter++)
+    {
+        default_cf_memory_size.emplace(iter->first, iter->second);
+        total_memory_size += iter->second;
+    }
+    for (auto iter = ori_region_data.write_cf_memory_size.begin(); iter != ori_region_data.write_cf_memory_size.end();)
+    {
+        write_cf_memory_size.emplace(iter->first, iter->second);
+        total_memory_size += iter->second;
+    }
 }
 
 size_t RegionData::dataSize() const
@@ -185,13 +248,21 @@ size_t RegionData::dataSize() const
     return cf_data_size;
 }
 
+size_t RegionData::memorySize() const
+{
+    return total_memory_size;
+}
+
 void RegionData::assignRegionData(RegionData && new_region_data)
 {
     default_cf = std::move(new_region_data.default_cf);
     write_cf = std::move(new_region_data.write_cf);
     lock_cf = std::move(new_region_data.lock_cf);
+    default_cf_memory_size = std::move(new_region_data.default_cf_memory_size);
+    write_cf_memory_size = std::move(new_region_data.write_cf_memory_size);
 
     cf_data_size = new_region_data.cf_data_size.load();
+    total_memory_size = new_region_data.total_memory_size.load();
 }
 
 size_t RegionData::serialize(WriteBuffer & buf) const
@@ -247,6 +318,7 @@ RegionData::RegionData(RegionData && data)
     , default_cf(std::move(data.default_cf))
     , lock_cf(std::move(data.lock_cf))
     , cf_data_size(data.cf_data_size.load())
+    , total_memory_size(data.total_memory_size.load())
 {}
 
 RegionData & RegionData::operator=(RegionData && rhs)
@@ -255,6 +327,7 @@ RegionData & RegionData::operator=(RegionData && rhs)
     default_cf = std::move(rhs.default_cf);
     lock_cf = std::move(rhs.lock_cf);
     cf_data_size = rhs.cf_data_size.load();
+    total_memory_size = rhs.total_memory_size.load();
     return *this;
 }
 

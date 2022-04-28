@@ -43,11 +43,11 @@ template <typename Trait>
 RegionDataRes RegionCFDataBase<Trait>::insert(TiKVKey && key, TiKVValue && value)
 {
     const auto & raw_key = RecordKVFormat::decodeTiKVKey(key);
-    auto kv_pair = Trait::genKVPair(std::move(key), raw_key, std::move(value));
+    auto [kv_pair, memory_size] = Trait::genKVPair(std::move(key), raw_key, std::move(value));
     if (!kv_pair)
-        return 0;
+        return std::pair<size_t, size_t>(0, 0);
 
-    return insert(std::move(*kv_pair));
+    return std::make_pair(insert(std::move(*kv_pair)), memory_size);
 }
 
 template <>
@@ -56,11 +56,11 @@ RegionDataRes RegionCFDataBase<RegionLockCFDataTrait>::insert(TiKVKey && key, Ti
     Pair kv_pair = RegionLockCFDataTrait::genKVPair(std::move(key), std::move(value));
     // according to the process of pessimistic lock, just overwrite.
     data.insert_or_assign(std::move(kv_pair.first), std::move(kv_pair.second));
-    return 0;
+    return std::pair<size_t, size_t>(0, 0);
 }
 
 template <typename Trait>
-RegionDataRes RegionCFDataBase<Trait>::insert(std::pair<Key, Value> && kv_pair)
+size_t RegionCFDataBase<Trait>::insert(std::pair<Key, Value> && kv_pair)
 {
     auto & map = data;
     auto [it, ok] = map.emplace(std::move(kv_pair));

@@ -23,7 +23,7 @@ namespace DB
 
 struct TiKVRangeKey;
 using RegionRange = std::pair<TiKVRangeKey, TiKVRangeKey>;
-using RegionDataRes = size_t;
+using RegionDataRes = std::pair<size_t, size_t>;
 
 template <typename Trait>
 struct RegionCFDataBase
@@ -70,7 +70,7 @@ struct RegionCFDataBase
 
 private:
     static bool shouldIgnoreRemove(const Value & value);
-    RegionDataRes insert(std::pair<Key, Value> && kv_pair);
+    size_t insert(std::pair<Key, Value> && kv_pair);
 
 private:
     Data data;

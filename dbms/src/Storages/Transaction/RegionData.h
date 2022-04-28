@@ -51,6 +51,8 @@ public:
 
     size_t dataSize() const;
 
+    size_t memorySize() const;
+
     void assignRegionData(RegionData && new_region_data);
 
     size_t serialize(WriteBuffer & buf) const;
@@ -81,8 +83,13 @@ private:
     RegionDefaultCFData default_cf;
     RegionLockCFData lock_cf;
 
+    std::map<TiKVKey, size_t> write_cf_memory_size;
+    std::map<TiKVKey, size_t> default_cf_memory_size;
+
     // Size of data cf & write cf, without lock cf.
     std::atomic<size_t> cf_data_size = 0;
+
+    std::atomic<size_t> total_memory_size = 0;
 };
 
 } // namespace DB

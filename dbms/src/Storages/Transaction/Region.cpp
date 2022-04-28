@@ -434,6 +434,11 @@ size_t Region::dataSize() const
     return data.dataSize();
 }
 
+size_t Region::memorySize() const
+{
+    return data.memorySize();
+}
+
 size_t Region::writeCFCount() const
 {
     std::shared_lock<std::shared_mutex> lock(mutex);
