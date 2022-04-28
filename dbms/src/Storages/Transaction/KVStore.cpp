@@ -294,6 +294,7 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
             cmd_size += cmds.keys[i].len + sizeof(BaseBuffView);
             break;
         }
+        }
     }
     GET_METRIC(tiflash_kvstore_raft_command_size).Increment(cmd_size);
     auto region_persist_lock = region_manager.genRegionTaskLock(region_id);
