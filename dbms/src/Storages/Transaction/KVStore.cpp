@@ -299,17 +299,16 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
     SCOPE_EXIT({
         GET_METRIC(tiflash_kvstore_raft_command_size).Decrement(cmd_size);
     });
-    return EngineStoreApplyRes::None;
-//    auto region_persist_lock = region_manager.genRegionTaskLock(region_id);
-//
-//    const RegionPtr region = getRegion(region_id);
-//    if (region == nullptr)
-//    {
-//        return EngineStoreApplyRes::NotFound;
-//    }
-//
-//    auto res = region->handleWriteRaftCmd(cmds, index, term, tmt);
-//    return res;
+    auto region_persist_lock = region_manager.genRegionTaskLock(region_id);
+
+    const RegionPtr region = getRegion(region_id);
+    if (region == nullptr)
+    {
+        return EngineStoreApplyRes::NotFound;
+    }
+
+    auto res = region->handleWriteRaftCmd(cmds, index, term, tmt);
+    return res;
 }
 
 void KVStore::handleDestroy(UInt64 region_id, TMTContext & tmt)
