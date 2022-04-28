@@ -346,7 +346,7 @@ void RegionTable::writeBlockByRegion(
 
     LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "write committed data rows {}", data_list_read->size());
     reportUpstreamLatency(*data_list_read);
-    writeRegionDataToStorage(context, region, *data_list_read, log);
+//    writeRegionDataToStorage(context, region, *data_list_read, log);
 
     RemoveRegionCommitCache(region, *data_list_read, lock_region);
 

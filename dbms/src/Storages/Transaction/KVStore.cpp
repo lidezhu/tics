@@ -296,9 +296,6 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
         }
     }
     GET_METRIC(tiflash_kvstore_raft_command_size).Increment(cmd_size);
-    SCOPE_EXIT({
-        GET_METRIC(tiflash_kvstore_raft_command_size).Decrement(cmd_size);
-    });
     auto region_persist_lock = region_manager.genRegionTaskLock(region_id);
 
     const RegionPtr region = getRegion(region_id);
@@ -310,12 +307,16 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
     auto res = region->handleWriteRaftCmd(cmds, index, term, tmt);
     size_t region_data_size = 0;
     size_t region_data_memory_size = 0;
-    tmt.getKVStore()->traverseRegions([&region_data_size, &region_data_memory_size](RegionID, const RegionPtr & region) {
+    size_t region_write_cf_num = 0;
+    tmt.getKVStore()->traverseRegions([&region_data_size, &region_data_memory_size, &region_write_cf_num](RegionID, const RegionPtr & region) {
         region_data_size += region->dataSize();
         region_data_memory_size += region->memorySize();
+        region_write_cf_num += region->writeCFCount();
     });
     GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(region_data_size);
     GET_METRIC(tiflash_kvstore_region_data_consume_memory_size).Set(region_data_memory_size);
+    GET_METRIC(tiflash_kvstore_region_cf_size).Set(region_write_cf_num);
+    LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "region total cf count {}", region_write_cf_num);
     return res;
 }
 
