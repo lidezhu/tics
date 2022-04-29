@@ -84,9 +84,7 @@ size_t RegionCFDataBase<Trait>::calcTiKVKeyValueSize(const TiKVKey & key, const 
 {
     if constexpr (std::is_same<Trait, RegionLockCFDataTrait>::value)
     {
-        std::ignore = key;
-        std::ignore = value;
-        return 0;
+        return key.dataSize() + value.dataSize();
     }
     else
         return key.dataSize() + value.dataSize();
