@@ -57,9 +57,14 @@ RegionDataRes RegionCFDataBase<RegionLockCFDataTrait>::insert(TiKVKey && key, Ti
     Pair kv_pair = RegionLockCFDataTrait::genKVPair(std::move(key), std::move(value));
     // according to the process of pessimistic lock, just overwrite.
     auto [it, ok] = data.insert_or_assign(std::move(kv_pair.first), std::move(kv_pair.second));
-    std::ignore = ok;
-    return calcTiKVKeyValueSize(it->second);
-    // return 0;
+    if (ok)
+    {
+        return calcTiKVKeyValueSize(it->second);
+    }
+    else
+    {
+        return 0;
+    }
 }
 
 template <typename Trait>

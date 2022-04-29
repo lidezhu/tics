@@ -66,11 +66,6 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
         Timestamp ts = RecordKVFormat::getTs(key);
         // removed by gc, may not exist.
         cf_data_size -= write_cf.remove(RegionWriteCFData::Key{pk, ts}, true);
-//        if (write_cf_memory_size.find(key) != write_cf_memory_size.end())
-//        {
-//            total_memory_size -= write_cf_memory_size.at(key);
-//            write_cf_memory_size.erase(key);
-//        }
         return;
     }
     case ColumnFamilyType::Default:
@@ -80,16 +75,15 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
         Timestamp ts = RecordKVFormat::getTs(key);
         // removed by gc, may not exist.
         cf_data_size -= default_cf.remove(RegionDefaultCFData::Key{pk, ts}, true);
-//        if (default_cf_memory_size.find(key) != default_cf_memory_size.end())
-//        {
-//            total_memory_size -= default_cf_memory_size.at(key);
-//            default_cf_memory_size.erase(key);
-//        }
         return;
     }
     case ColumnFamilyType::Lock:
     {
-        total_memory_size -= lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
+        size_t size_removed = lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
+        if (total_memory_size <= size_removed)
+            total_memory_size = 0;
+        else
+            total_memory_size -= size_removed;
         return;
     }
     }
@@ -111,15 +105,11 @@ RegionData::WriteCFIter RegionData::removeDataByWriteIt(const WriteCFIter & writ
         if (auto data_it = map.find({pk, decoded_val.prewrite_ts}); data_it != map.end())
         {
             cf_data_size -= RegionDefaultCFData::calcTiKVKeyValueSize(data_it->second);
-//            total_memory_size -= default_cf_memory_size.at(*key);
-//            default_cf_memory_size.erase(*key);
             map.erase(data_it);
         }
     }
 
     cf_data_size -= RegionWriteCFData::calcTiKVKeyValueSize(write_it->second);
-//    total_memory_size -= write_cf_memory_size.at(*key);
-//    write_cf_memory_size.erase(*key);
 
     return write_cf.getDataMut().erase(write_it);
 }
