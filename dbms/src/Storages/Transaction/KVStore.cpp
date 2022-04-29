@@ -308,15 +308,17 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
     size_t region_data_size = 0;
     size_t region_data_memory_size = 0;
     size_t region_default_cf_num = 0;
-    tmt.getKVStore()->traverseRegions([&region_data_size, &region_data_memory_size, &region_default_cf_num](RegionID, const RegionPtr & region) {
+    size_t region_lock_cf_num = 0;
+    traverseRegions([&region_data_size, &region_data_memory_size, &region_default_cf_num, &region_lock_cf_num](RegionID, const RegionPtr & region) {
         region_data_size += region->dataSize();
         region_data_memory_size += region->memorySize();
         region_default_cf_num += region->defaultCFCount();
+        region_lock_cf_num += region->lockCFCount();
     });
     GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(region_data_size);
     GET_METRIC(tiflash_kvstore_region_data_consume_memory_size).Set(region_data_memory_size);
     GET_METRIC(tiflash_kvstore_region_cf_size).Set(region_default_cf_num);
-    LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "region total default cf count {}", region_default_cf_num);
+    LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "region total default cf count {} lock cf count", region_default_cf_num, region_lock_cf_num);
     return res;
 }
 

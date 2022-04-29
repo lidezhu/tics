@@ -451,6 +451,12 @@ size_t Region::defaultCFCount() const
     return data.defaultCF().getSize();
 }
 
+size_t Region::lockCFCount() const
+{
+    std::shared_lock<std::shared_mutex> lock(mutex);
+    return data.lockCF().getSize();
+}
+
 std::string Region::dataInfo() const
 {
     std::shared_lock<std::shared_mutex> lock(mutex);

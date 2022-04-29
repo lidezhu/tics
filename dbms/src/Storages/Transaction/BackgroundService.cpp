@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <Common/TiFlashMetrics.h>
 #include <Interpreters/Context.h>
 #include <Storages/BackgroundProcessingPool.h>
 #include <Storages/Transaction/BackgroundService.h>
@@ -33,26 +32,6 @@ BackgroundService::BackgroundService(TMTContext & tmt_)
     single_thread_task_handle = background_pool.addTask(
         [this] {
             tmt.getKVStore()->gcRegionPersistedCache();
-            return false;
-        },
-        false);
-
-    kvstore_size_metric_handle = background_pool.addTask(
-        [this] {
-            size_t region_data_size = 0;
-            size_t region_data_memory_size = 0;
-            size_t memory_cache_size = 0;
-            size_t region_count = 0;
-            tmt.getKVStore()->traverseRegions([&region_data_size, &region_data_memory_size, &memory_cache_size, &region_count](RegionID, const RegionPtr & region) {
-                region_data_size += region->dataSize();
-                region_data_memory_size += region->memorySize();
-                memory_cache_size += region->getApproxMemCacheInfo().second;
-                region_count += 1;
-            });
-            GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(region_data_size);
-            GET_METRIC(tiflash_kvstore_region_data_consume_memory_size).Set(region_data_memory_size);
-            GET_METRIC(tiflash_kvstore_data_approx_cache_memory_size).Set(memory_cache_size);
-            LOG_FMT_INFO(log, "KVStore region data memory size is {}, memory cache size is {}, region count {}", region_data_size, memory_cache_size, region_count);
             return false;
         },
         false);
@@ -124,11 +103,6 @@ BackgroundService::~BackgroundService()
     {
         background_pool.removeTask(single_thread_task_handle);
         single_thread_task_handle = nullptr;
-    }
-    if (kvstore_size_metric_handle)
-    {
-        background_pool.removeTask(kvstore_size_metric_handle);
-        kvstore_size_metric_handle = nullptr;
     }
     if (table_flush_handle)
     {

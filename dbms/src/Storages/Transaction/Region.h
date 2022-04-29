@@ -150,6 +150,7 @@ public:
     size_t memorySize() const;
     size_t writeCFCount() const;
     size_t defaultCFCount() const;
+    size_t lockCFCount() const;
     std::string dataInfo() const;
 
     void markCompactLog() const;
