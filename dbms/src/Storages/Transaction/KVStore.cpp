@@ -318,7 +318,7 @@ EngineStoreApplyRes KVStore::handleWriteRaftCmd(const WriteCmdsView & cmds, UInt
     GET_METRIC(tiflash_kvstore_region_data_memory_size).Set(region_data_size);
     GET_METRIC(tiflash_kvstore_region_data_consume_memory_size).Set(region_data_memory_size);
     GET_METRIC(tiflash_kvstore_region_cf_size).Set(region_default_cf_num);
-    LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "region total default cf count {} lock cf count", region_default_cf_num, region_lock_cf_num);
+    LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "region total default cf count {} lock cf count {}", region_default_cf_num, region_lock_cf_num);
     return res;
 }
 
