@@ -94,8 +94,10 @@ struct RegionLockCFDataTrait
     {
         auto key = std::make_shared<const TiKVKey>(std::move(key_));
         auto value = std::make_shared<const TiKVValue>(std::move(value_));
+        // return {{key, std::string_view(key->data(), key->dataSize())},
+        //     Value{key, value, std::make_shared<const DecodedLockCFValue>(key, value)}};
         return {{key, std::string_view(key->data(), key->dataSize())},
-            Value{key, value, std::make_shared<const DecodedLockCFValue>(key, value)}};
+             Value{key, value, nullptr}};
     }
 };
 
