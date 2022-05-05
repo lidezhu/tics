@@ -110,6 +110,10 @@ public:
     typedef T value_type;
 
     MyAlloc() =default;
+    template <typename U>
+    MyAlloc (const MyAlloc<U>& other) noexcept {
+        memory_allocated = other.getMemoryAllocatedSize();
+    }
 
     T* allocate (std::size_t num)
     {
@@ -122,7 +126,7 @@ public:
         ::operator delete(p);
     }
 
-    size_t getMemoryAllocatedSize() noexcept { return memory_allocated; }
+    size_t getMemoryAllocatedSize() const noexcept { return memory_allocated; }
 
 private:
     size_t memory_allocated = 0;
