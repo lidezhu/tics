@@ -18,6 +18,7 @@
 #include <Storages/Transaction/RegionData.h>
 #include <Storages/Transaction/RegionLockInfo.h>
 #include <Storages/Transaction/RegionRangeKeys.h>
+#include <common/logger_useful.h>
 
 namespace DB
 {
@@ -45,6 +46,7 @@ void RegionData::insert(ColumnFamilyType cf, TiKVKey && key, TiKVValue && value)
     case ColumnFamilyType::Default:
     {
         cf_data_size += default_cf.insert(std::move(key), std::move(value));
+        LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "default cf size {}", default_cf.getSize());
         return;
     }
     case ColumnFamilyType::Lock:

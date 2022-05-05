@@ -60,6 +60,8 @@ RegionDataRes RegionCFDataBase<RegionLockCFDataTrait>::insert(TiKVKey && key, Ti
     Pair kv_pair = RegionLockCFDataTrait::genKVPair(std::move(key), std::move(value));
     // according to the process of pessimistic lock, just overwrite.
     auto [it, ok] = data.insert_or_assign(std::move(kv_pair.first), std::move(kv_pair.second));
+    LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "Lock cf size {} bucket count {} allocator size {} entry size {}",
+                  data.size(), data.bucket_count(), allocator.getMemoryAllocatedSize(), sizeof(RegionLockCFDataTrait::Map::value_type));
     if (ok)
     {
         auto new_size = allocator.getMemoryAllocatedSize();
