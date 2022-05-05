@@ -104,6 +104,36 @@ struct RegionDefaultCFDataTrait
     static std::shared_ptr<const TiKVValue> getTiKVValue(const Map::const_iterator & it) { return std::get<1>(it->second); }
 };
 
+template <typename T>
+class MyAlloc {
+public:
+    typedef T value_type;
+
+    MyAlloc() =default;
+
+    T* allocate (std::size_t num)
+    {
+        memory_allocated += num * sizeof(T);
+        return static_cast<T*>(::operator new(num*sizeof(T)));
+    }
+    void deallocate (T* p, std::size_t num)
+    {
+        memory_allocated -= num * sizeof(T);
+        ::operator delete(p);
+    }
+
+    size_t getMemoryAllocatedSize() noexcept { return memory_allocated; }
+
+private:
+    size_t memory_allocated = 0;
+};
+
+template <typename T1, typename T2>
+bool operator== (const MyAlloc<T1>&, const MyAlloc<T2>&) noexcept { return false; }
+
+template <typename T1, typename T2>
+bool operator!= (const MyAlloc<T1>&, const MyAlloc<T2>&) noexcept { return true; }
+
 struct RegionLockCFDataTrait
 {
     struct Key
@@ -118,7 +148,7 @@ struct RegionLockCFDataTrait
     };
     using DecodedLockCFValue = RecordKVFormat::DecodedLockCFValue;
     using Value = std::tuple<std::shared_ptr<const TiKVKey>, std::shared_ptr<const TiKVValue>, std::shared_ptr<const DecodedLockCFValue>>;
-    using Map = std::unordered_map<Key, Value, Key::Hash>;
+    using Map = std::unordered_map<Key, Value, Key::Hash, std::equal_to<Key>, MyAlloc<std::pair<const Key, Value>>>;
 
     static Map::value_type genKVPair(TiKVKey && key_, TiKVValue && value_)
     {

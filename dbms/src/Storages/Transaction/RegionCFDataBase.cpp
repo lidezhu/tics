@@ -16,6 +16,7 @@
 #include <Storages/Transaction/RegionCFDataTrait.h>
 #include <Storages/Transaction/RegionData.h>
 #include <Storages/Transaction/RegionRangeKeys.h>
+#include <common/logger_useful.h>
 
 namespace DB
 {
@@ -54,15 +55,19 @@ RegionDataRes RegionCFDataBase<Trait>::insert(TiKVKey && key, TiKVValue && value
 template <>
 RegionDataRes RegionCFDataBase<RegionLockCFDataTrait>::insert(TiKVKey && key, TiKVValue && value)
 {
+    auto allocator = data.get_allocator();
+    auto old_size = allocator.getMemoryAllocatedSize();
     Pair kv_pair = RegionLockCFDataTrait::genKVPair(std::move(key), std::move(value));
     // according to the process of pessimistic lock, just overwrite.
     auto [it, ok] = data.insert_or_assign(std::move(kv_pair.first), std::move(kv_pair.second));
     if (ok)
     {
-        return calcTiKVKeyValueSize(it->second);
+        auto new_size = allocator.getMemoryAllocatedSize();
+        return new_size - old_size + calcTiKVKeyValueSize(it->second);
     }
     else
     {
+        LOG_FMT_DEBUG(&Poco::Logger::get(__PRETTY_FUNCTION__), "RegionCFDataBase<RegionLockCFDataTrait> override lock");
         return 0;
     }
 }
@@ -87,12 +92,13 @@ size_t RegionCFDataBase<Trait>::calcTiKVKeyValueSize(const Value & value)
 template <typename Trait>
 size_t RegionCFDataBase<Trait>::calcTiKVKeyValueSize(const TiKVKey & key, const TiKVValue & value)
 {
-    if constexpr (std::is_same<Trait, RegionLockCFDataTrait>::value)
-    {
-        return key.dataSize() + value.dataSize();
-    }
-    else
-        return key.dataSize() + value.dataSize();
+//    if constexpr (std::is_same<Trait, RegionLockCFDataTrait>::value)
+//    {
+//        return key.dataSize() + value.dataSize();
+//    }
+//    else
+//        return key.dataSize() + value.dataSize();
+    return key.dataSize() + value.dataSize();
 }
 
 
@@ -121,7 +127,20 @@ size_t RegionCFDataBase<Trait>::remove(const Key & key, bool quiet)
             return 0;
 
         size_t size = calcTiKVKeyValueSize(value);
+        size_t old_map_size = 0;
+        size_t new_map_size = 0;
+        if constexpr (std::is_same<Trait, RegionLockCFDataTrait>::value)
+        {
+            old_map_size = map.get_allocator().getMemoryAllocatedSize();
+        }
         map.erase(it);
+        if constexpr (std::is_same<Trait, RegionLockCFDataTrait>::value)
+        {
+            new_map_size = map.get_allocator().getMemoryAllocatedSize();
+            assert(new_map_size <= old_map_size);
+            size += old_map_size - new_map_size;
+        }
+
         return size;
     }
     else if (!quiet)
