@@ -18,7 +18,7 @@
 
 #include <map>
 
-#include "parallel_hashmap/phmap.h"
+#include "absl/container/flat_hash_map.h"
 
 namespace DB
 {
@@ -90,7 +90,7 @@ struct RegionLockCFDataTrait
     };
     using DecodedLockCFValue = RecordKVFormat::DecodedLockCFValue;
     using Value = std::tuple<std::shared_ptr<const TiKVKey>, std::shared_ptr<const TiKVValue>, std::shared_ptr<const DecodedLockCFValue>>;
-    using Map = phmap::flat_hash_map<Key, Value, Key::Hash>;
+    using Map = absl::flat_hash_map<Key, Value, Key::Hash>;
 
     static Map::value_type genKVPair(TiKVKey && key_, TiKVValue && value_)
     {
