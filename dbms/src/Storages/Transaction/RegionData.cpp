@@ -17,6 +17,7 @@
 #include <Storages/Transaction/ColumnFamily.h>
 #include <Storages/Transaction/RegionData.h>
 #include <Storages/Transaction/RegionLockInfo.h>
+#include <Common/TiFlashMetrics.h>
 
 namespace DB
 {
@@ -48,7 +49,8 @@ void RegionData::insert(ColumnFamilyType cf, TiKVKey && key, TiKVValue && value)
     }
     case ColumnFamilyType::Lock:
     {
-        lock_cf.insert(std::move(key), std::move(value));
+        size_t size = lock_cf.insert(std::move(key), std::move(value));
+        GET_METRIC(tiflash_kvstore_lock_cf_size).Increment(size);
         return;
     }
     }
@@ -78,7 +80,8 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
     }
     case ColumnFamilyType::Lock:
     {
-        lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
+        size_t size = lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
+        GET_METRIC(tiflash_kvstore_lock_cf_size).Decrement(size);
         return;
     }
     }
@@ -166,7 +169,7 @@ void RegionData::splitInto(const RegionRange & range, RegionData & new_region_da
     size_t size_changed = 0;
     size_changed += default_cf.splitInto(range, new_region_data.default_cf);
     size_changed += write_cf.splitInto(range, new_region_data.write_cf);
-    size_changed += lock_cf.splitInto(range, new_region_data.lock_cf);
+    lock_cf.splitInto(range, new_region_data.lock_cf);
     cf_data_size -= size_changed;
     new_region_data.cf_data_size += size_changed;
 }
@@ -176,7 +179,7 @@ void RegionData::mergeFrom(const RegionData & ori_region_data)
     size_t size_changed = 0;
     size_changed += default_cf.mergeFrom(ori_region_data.default_cf);
     size_changed += write_cf.mergeFrom(ori_region_data.write_cf);
-    size_changed += lock_cf.mergeFrom(ori_region_data.lock_cf);
+    lock_cf.mergeFrom(ori_region_data.lock_cf);
     cf_data_size += size_changed;
 }
 
@@ -210,7 +213,7 @@ void RegionData::deserialize(ReadBuffer & buf, RegionData & region_data)
     size_t total_size = 0;
     total_size += RegionDefaultCFData::deserialize(buf, region_data.default_cf);
     total_size += RegionWriteCFData::deserialize(buf, region_data.write_cf);
-    total_size += RegionLockCFData::deserialize(buf, region_data.lock_cf);
+    RegionLockCFData::deserialize(buf, region_data.lock_cf);
 
     region_data.cf_data_size += total_size;
 }
