@@ -17,7 +17,6 @@
 #include <Storages/Transaction/ColumnFamily.h>
 #include <Storages/Transaction/RegionData.h>
 #include <Storages/Transaction/RegionLockInfo.h>
-#include <Common/TiFlashMetrics.h>
 
 namespace DB
 {
@@ -49,9 +48,7 @@ void RegionData::insert(ColumnFamilyType cf, TiKVKey && key, TiKVValue && value)
     }
     case ColumnFamilyType::Lock:
     {
-        lock_cf.insert(std::move(key), std::move(value));
-//        size_t size = lock_cf.insert(std::move(key), std::move(value));
-//        GET_METRIC(tiflash_kvstore_lock_cf_size).Increment(size);
+        lock_cf_data_size += lock_cf.insert(std::move(key), std::move(value));
         return;
     }
     }
@@ -81,9 +78,8 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
     }
     case ColumnFamilyType::Lock:
     {
-        lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
-//        size_t size = lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
-//        GET_METRIC(tiflash_kvstore_lock_cf_size).Decrement(size);
+        lock_cf_data_size -= lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
+        lock_cf_data_size = std::max(lock_cf_data_size, 0);
         return;
     }
     }
@@ -169,25 +165,35 @@ DecodedLockCFValuePtr RegionData::getLockInfo(const RegionLockReadQuery & query)
 void RegionData::splitInto(const RegionRange & range, RegionData & new_region_data)
 {
     size_t size_changed = 0;
+    size_t lock_cf_size_changed = 0;
     size_changed += default_cf.splitInto(range, new_region_data.default_cf);
     size_changed += write_cf.splitInto(range, new_region_data.write_cf);
-    lock_cf.splitInto(range, new_region_data.lock_cf);
+    lock_cf_size_changed += lock_cf.splitInto(range, new_region_data.lock_cf);
     cf_data_size -= size_changed;
+    lock_cf_data_size -= lock_cf_size_changed;
     new_region_data.cf_data_size += size_changed;
+    new_region_data.lock_cf_data_size += lock_cf_size_changed;
 }
 
 void RegionData::mergeFrom(const RegionData & ori_region_data)
 {
     size_t size_changed = 0;
+    size_t lock_cf_size_changed = 0;
     size_changed += default_cf.mergeFrom(ori_region_data.default_cf);
     size_changed += write_cf.mergeFrom(ori_region_data.write_cf);
-    lock_cf.mergeFrom(ori_region_data.lock_cf);
+    lock_cf_size_changed += lock_cf.mergeFrom(ori_region_data.lock_cf);
     cf_data_size += size_changed;
+    lock_cf_data_size += lock_cf_size_changed;
 }
 
 size_t RegionData::dataSize() const
 {
     return cf_data_size;
+}
+
+size_t RegionData::lockCFDataSize() const
+{
+    return lock_cf_data_size;
 }
 
 void RegionData::assignRegionData(RegionData && new_region_data)
@@ -197,6 +203,7 @@ void RegionData::assignRegionData(RegionData && new_region_data)
     lock_cf = std::move(new_region_data.lock_cf);
 
     cf_data_size = new_region_data.cf_data_size.load();
+    lock_cf_data_size = new_region_data.cf_data_size.load();
 }
 
 size_t RegionData::serialize(WriteBuffer & buf) const
@@ -213,11 +220,13 @@ size_t RegionData::serialize(WriteBuffer & buf) const
 void RegionData::deserialize(ReadBuffer & buf, RegionData & region_data)
 {
     size_t total_size = 0;
+    size_t lock_cf_total_size = 0;
     total_size += RegionDefaultCFData::deserialize(buf, region_data.default_cf);
     total_size += RegionWriteCFData::deserialize(buf, region_data.write_cf);
-    RegionLockCFData::deserialize(buf, region_data.lock_cf);
+    lock_cf_total_size += RegionLockCFData::deserialize(buf, region_data.lock_cf);
 
     region_data.cf_data_size += total_size;
+    region_data.lock_cf_data_size += lock_cf_total_size;
 }
 
 RegionWriteCFData & RegionData::writeCF()
@@ -244,7 +253,7 @@ const RegionLockCFData & RegionData::lockCF() const
 
 bool RegionData::isEqual(const RegionData & r2) const
 {
-    return default_cf == r2.default_cf && write_cf == r2.write_cf && lock_cf == r2.lock_cf && cf_data_size == r2.cf_data_size;
+    return default_cf == r2.default_cf && write_cf == r2.write_cf && lock_cf == r2.lock_cf && cf_data_size == r2.cf_data_size && lock_cf_data_size == r2.lock_cf_data_size;
 }
 
 RegionData::RegionData(RegionData && data)
@@ -252,6 +261,7 @@ RegionData::RegionData(RegionData && data)
     , default_cf(std::move(data.default_cf))
     , lock_cf(std::move(data.lock_cf))
     , cf_data_size(data.cf_data_size.load())
+    , lock_cf_data_size(data.lock_cf_data_size.load())
 {}
 
 RegionData & RegionData::operator=(RegionData && rhs)
@@ -260,6 +270,7 @@ RegionData & RegionData::operator=(RegionData && rhs)
     default_cf = std::move(rhs.default_cf);
     lock_cf = std::move(rhs.lock_cf);
     cf_data_size = rhs.cf_data_size.load();
+    lock_cf_data_size = rhs.lock_cf_data_size.load();
     return *this;
 }
 

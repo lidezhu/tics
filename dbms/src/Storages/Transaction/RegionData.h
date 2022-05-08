@@ -51,6 +51,8 @@ public:
 
     size_t dataSize() const;
 
+    size_t lockCFDataSize() const;
+
     void assignRegionData(RegionData && new_region_data);
 
     size_t serialize(WriteBuffer & buf) const;
@@ -83,6 +85,8 @@ private:
 
     // Size of data cf & write cf, without lock cf.
     std::atomic<size_t> cf_data_size = 0;
+    // Size of lock cf.
+    std::atomic<size_t> lock_cf_data_size = 0;
 };
 
 } // namespace DB

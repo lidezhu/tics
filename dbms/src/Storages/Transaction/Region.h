@@ -147,6 +147,7 @@ public:
     void setStateApplying();
 
     size_t dataSize() const;
+    size_t lockInfoSize() const;
     size_t writeCFCount() const;
     std::string dataInfo() const;
 

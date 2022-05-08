@@ -54,6 +54,7 @@ private:
     BackgroundProcessingPool::TaskHandle table_flush_handle;
     BackgroundProcessingPool::TaskHandle region_handle;
     BackgroundProcessingPool::TaskHandle storage_gc_handle;
+    BackgroundProcessingPool::TaskHandle kvstore_metric_handle;
 };
 
 } // namespace DB

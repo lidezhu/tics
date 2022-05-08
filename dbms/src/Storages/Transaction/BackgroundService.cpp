@@ -18,6 +18,7 @@
 #include <Storages/Transaction/KVStore.h>
 #include <Storages/Transaction/Region.h>
 #include <Storages/Transaction/TMTContext.h>
+#include <Common/TiFlashMetrics.h>
 
 namespace DB
 {
@@ -32,6 +33,17 @@ BackgroundService::BackgroundService(TMTContext & tmt_)
     single_thread_task_handle = background_pool.addTask(
         [this] {
             tmt.getKVStore()->gcRegionPersistedCache();
+            return false;
+        },
+        false);
+
+    kvstore_metric_handle = background_pool.addTask(
+        [this] {
+            size_t lock_cf_size = 0;
+            tmt.getKVStore()->traverseRegions([&lock_cf_size](RegionID, const RegionPtr & region) {
+                lock_cf_size += region->lockInfoSize();
+            });
+            GET_METRIC(tiflash_kvstore_lock_cf_size).Set(lock_cf_size);
             return false;
         },
         false);
@@ -119,6 +131,11 @@ BackgroundService::~BackgroundService()
     {
         background_pool.removeTask(storage_gc_handle);
         storage_gc_handle = nullptr;
+    }
+    if (kvstore_metric_handle)
+    {
+        background_pool.removeTask(kvstore_metric_handle);
+        kvstore_metric_handle = nullptr;
     }
 }
 
