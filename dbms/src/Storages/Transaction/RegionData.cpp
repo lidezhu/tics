@@ -49,8 +49,9 @@ void RegionData::insert(ColumnFamilyType cf, TiKVKey && key, TiKVValue && value)
     }
     case ColumnFamilyType::Lock:
     {
-        size_t size = lock_cf.insert(std::move(key), std::move(value));
-        GET_METRIC(tiflash_kvstore_lock_cf_size).Increment(size);
+        lock_cf.insert(std::move(key), std::move(value));
+//        size_t size = lock_cf.insert(std::move(key), std::move(value));
+//        GET_METRIC(tiflash_kvstore_lock_cf_size).Increment(size);
         return;
     }
     }
@@ -80,8 +81,9 @@ void RegionData::remove(ColumnFamilyType cf, const TiKVKey & key)
     }
     case ColumnFamilyType::Lock:
     {
-        size_t size = lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
-        GET_METRIC(tiflash_kvstore_lock_cf_size).Decrement(size);
+        lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
+//        size_t size = lock_cf.remove(RegionLockCFDataTrait::Key{nullptr, std::string_view(key.data(), key.dataSize())}, true);
+//        GET_METRIC(tiflash_kvstore_lock_cf_size).Decrement(size);
         return;
     }
     }
