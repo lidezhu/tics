@@ -40,12 +40,15 @@ BackgroundService::BackgroundService(TMTContext & tmt_)
     kvstore_metric_handle = background_pool.addTask(
         [this] {
             size_t lock_cf_size = 0;
+            size_t default_and_write_cf_size = 0;
             size_t default_cf_num = 0;
-            tmt.getKVStore()->traverseRegions([&lock_cf_size, &default_cf_num](RegionID, const RegionPtr & region) {
+            tmt.getKVStore()->traverseRegions([&lock_cf_size, &default_and_write_cf_size, &default_cf_num](RegionID, const RegionPtr & region) {
                 lock_cf_size += region->lockInfoSize();
+                default_and_write_cf_size += region->dataSize();
                 default_cf_num += region->defaultCFCount();
             });
             GET_METRIC(tiflash_kvstore_lock_cf_size).Set(lock_cf_size);
+            GET_METRIC(tiflash_kvstore_default_and_write_cf_size).Set(default_and_write_cf_size);
             LOG_FMT_INFO(log, "default cf num {}.", default_cf_num);
             return false;
         },
