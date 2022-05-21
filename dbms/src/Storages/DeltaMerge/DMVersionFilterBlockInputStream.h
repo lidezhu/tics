@@ -120,6 +120,19 @@ private:
             rowkey_column = std::make_unique<RowKeyColumnContainer>(raw_block.getByPosition(handle_col_pos).column, is_common_handle);
             version_col_data = getColumnVectorDataPtr<UInt64>(raw_block, version_col_pos);
             delete_col_data = getColumnVectorDataPtr<UInt8>(raw_block, delete_col_pos);
+            if constexpr (MODE == DM_VERSION_FILTER_MODE_COMPACT)
+            {
+                for (size_t i = 0; i < raw_block.rows(); i++)
+                {
+                    auto handle_col = raw_block.getByName(EXTRA_HANDLE_COLUMN_NAME);
+                    auto & pk_c = handle_col.column;
+                    auto ver_col = raw_block.getByName(VERSION_COLUMN_NAME);
+                    auto & ver_c = ver_col.column;
+                    auto del_col = raw_block.getByName(TAG_COLUMN_NAME);
+                    auto & del_c = del_col.column;
+                    LOG_FMT_DEBUG(log, "DMVersionFilterBlockInputStream check pk value {} version value {} tag value {}", pk_c->getInt(i), ver_c->getInt(i), del_c->getInt(i));
+                }
+            }
             return true;
         }
     }

@@ -477,19 +477,19 @@ void DeltaMergeStore::write(const Context & db_context, const DB::Settings & db_
     }
 
     // check block
-    for (size_t i = 0; i < rows; i++)
-    {
-        auto handle_col = block.getByName(EXTRA_HANDLE_COLUMN_NAME);
-        auto & pk_c = handle_col.column;
-        auto ver_col = block.getByName(VERSION_COLUMN_NAME);
-        auto & ver_c = ver_col.column;
-        auto del_col = block.getByName(TAG_COLUMN_NAME);
-        auto & del_c = del_col.column;
-        if (del_c->getInt(i) == 1)
-        {
-            LOG_FMT_DEBUG(log, "Delete pk value {} version value {} tag value {}", pk_c->getInt(i), ver_c->getInt(i), del_c->getInt(i));
-        }
-    }
+//    for (size_t i = 0; i < rows; i++)
+//    {
+//        auto handle_col = block.getByName(EXTRA_HANDLE_COLUMN_NAME);
+//        auto & pk_c = handle_col.column;
+//        auto ver_col = block.getByName(VERSION_COLUMN_NAME);
+//        auto & ver_c = ver_col.column;
+//        auto del_col = block.getByName(TAG_COLUMN_NAME);
+//        auto & del_c = del_col.column;
+//        if (del_c->getInt(i) == 1)
+//        {
+//            LOG_FMT_DEBUG(log, "Delete pk value {} version value {} tag value {}", pk_c->getInt(i), ver_c->getInt(i), del_c->getInt(i));
+//        }
+//    }
 
     Segments updated_segments;
 
