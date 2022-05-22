@@ -1095,13 +1095,27 @@ SegmentPtr Segment::merge(DMContext & dm_context, const ColumnDefinesPtr & schem
     /// And only saved data in this segment will be filtered by the segment range in the merge process,
     /// unsaved data will be directly copied to the new segment.
     /// So we flush here to make sure that all potential data left by previous split operation is saved.
+    /// This segment may contain some rows that not belong to this segment range which is left by previous split operation.
+    /// And only saved data in this segment will be filtered by the segment range in the merge process,
+    /// unsaved data will be directly copied to the new segment.
+    /// So we flush here to make sure that all potential data left by previous split operation is saved.
     while (!left->flushCache(dm_context))
     {
-        // keep flush until success
+        // keep flush until success if not abandoned
+        if (left->hasAbandoned())
+        {
+            LOG_FMT_DEBUG(left->log, "Give up merge segments left [{}], right [{}]", left->segmentId(), right->segmentId());
+            return {};
+        }
     }
     while (!right->flushCache(dm_context))
     {
-        // keep flush until success
+        // keep flush until success if not abandoned
+        if (right->hasAbandoned())
+        {
+            LOG_FMT_DEBUG(right->log, "Give up merge segments left [{}], right [{}]", left->segmentId(), right->segmentId());
+            return {};
+        }
     }
 
     auto left_snap = left->createSnapshot(dm_context, true, CurrentMetrics::DT_SnapshotOfSegmentMerge);
