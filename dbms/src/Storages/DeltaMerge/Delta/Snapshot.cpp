@@ -116,7 +116,7 @@ DeltaSnapshotPtr DeltaValueSpace::createSnapshot(const DMContext & context, bool
         }
         else
         {
-            if (auto b = pack->tryToBlock())
+            if (auto b = pack->tryToBlock(); b)
             {
                 auto pack_reader = b->getReader(context, snap->storage_snap, columns);
                 auto & dpb_reader = typeid_cast<DPBlockReader &>(*pack_reader);
