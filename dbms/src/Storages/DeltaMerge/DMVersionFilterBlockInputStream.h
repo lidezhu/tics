@@ -120,22 +120,22 @@ private:
             rowkey_column = std::make_unique<RowKeyColumnContainer>(raw_block.getByPosition(handle_col_pos).column, is_common_handle);
             version_col_data = getColumnVectorDataPtr<UInt64>(raw_block, version_col_pos);
             delete_col_data = getColumnVectorDataPtr<UInt8>(raw_block, delete_col_pos);
-            if constexpr (MODE == DM_VERSION_FILTER_MODE_COMPACT)
-            {
-                auto rows = raw_block.rows();
-                auto & pk_c = raw_block.getByName(EXTRA_HANDLE_COLUMN_NAME).column;
-                auto & ver_c = raw_block.getByName(VERSION_COLUMN_NAME).column;
-                auto & del_c = raw_block.getByName(TAG_COLUMN_NAME).column;
-                if (rows > 1)
-                {
-                    LOG_FMT_DEBUG(log, "{} rows: {}, first row: {} {} {}, last row: {} {} {}", __FUNCTION__, rows, pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0), pk_c->getInt(rows - 1), ver_c->getInt(rows - 1), del_c->getInt(rows - 1));
-                }
-                else
-                {
-                    // rows must be 1
-                    LOG_FMT_DEBUG(log, "{}  rows: {}, row: {} {} {}", __FUNCTION__, rows, pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0));
-                }
-            }
+//            if constexpr (MODE == DM_VERSION_FILTER_MODE_COMPACT)
+//            {
+//                auto rows = raw_block.rows();
+//                auto & pk_c = raw_block.getByName(EXTRA_HANDLE_COLUMN_NAME).column;
+//                auto & ver_c = raw_block.getByName(VERSION_COLUMN_NAME).column;
+//                auto & del_c = raw_block.getByName(TAG_COLUMN_NAME).column;
+//                if (rows > 1)
+//                {
+//                    LOG_FMT_DEBUG(log, "{} rows: {}, first row: {} {} {}, last row: {} {} {}", __FUNCTION__, rows, pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0), pk_c->getInt(rows - 1), ver_c->getInt(rows - 1), del_c->getInt(rows - 1));
+//                }
+//                else
+//                {
+//                    // rows must be 1
+//                    LOG_FMT_DEBUG(log, "{}  rows: {}, row: {} {} {}", __FUNCTION__, rows, pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0));
+//                }
+//            }
             return true;
         }
     }

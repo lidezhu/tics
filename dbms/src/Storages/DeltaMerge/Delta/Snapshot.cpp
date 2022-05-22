@@ -89,6 +89,10 @@ DeltaSnapshotPtr DeltaValueSpace::createSnapshot(const DMContext & context, bool
     size_t check_deletes = 0;
     size_t total_rows = 0;
     size_t total_deletes = 0;
+    ColumnDefinesPtr columns = std::make_shared<ColumnDefines>();
+    columns->emplace_back(getExtraHandleColumnDefine(false));
+    columns->emplace_back(getVersionColumnDefine());
+//    columns->emplace_back(getTagColumnDefine());
     for (const auto & pack : packs)
     {
         // If `for_update` is false, it will create a snapshot with all packs in DeltaValueSpace.
@@ -109,6 +113,24 @@ DeltaSnapshotPtr DeltaValueSpace::createSnapshot(const DMContext & context, bool
 
             check_rows += pack->getRows();
             check_deletes += pack->isDeleteRange();
+        }
+        else
+        {
+            if (auto b = pack->tryToBlock())
+            {
+                auto pack_reader = b->getReader(context, snap->storage_snap, columns);
+                auto & dpb_reader = typeid_cast<DPBlockReader &>(*pack_reader);
+                auto pk_column = dpb_reader.getPKColumn();
+                auto version_column = dpb_reader.getVersionColumn();
+                size_t block_rows = pk_column->size();
+                if (block_rows != 0)
+                {
+                    LOG_FMT_DEBUG(log, "unsaved packs rows {} with first row {} {} and last row {} {}",
+                                  block_rows,
+                                  pk_column->getInt(0), version_column->getInt(0),
+                                  pk_column->getInt(rows - 1), version_column->getInt(rows - 1));
+                }
+            }
         }
         total_rows += pack->getRows();
         total_deletes += pack->isDeleteRange();
