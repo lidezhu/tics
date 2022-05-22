@@ -145,6 +145,7 @@ StableValueSpacePtr createNewStable(DMContext & context,
     flags.setSingleFile(context.db_context.getSettingsRef().dt_enable_single_file_mode_dmfile);
 
     PageId dtfile_id = context.storage_pool.newDataPageIdForDTFile(delegator, __PRETTY_FUNCTION__);
+    LOG_FMT_DEBUG(&Poco::Logger::get("createNewStable"), "Create new dt file {}", dtfile_id);
     auto dtfile = writeIntoNewDMFile(context, schema_snap, input_stream, dtfile_id, store_path, flags);
     auto stable = std::make_shared<StableValueSpace>(stable_id);
     stable->setFiles({dtfile}, RowKeyRange::newAll(context.is_common_handle, context.rowkey_column_size));

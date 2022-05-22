@@ -454,8 +454,6 @@ Block DeltaMergeStore::addExtraColumnIfNeed(const Context & db_context, const Co
 
 void DeltaMergeStore::write(const Context & db_context, const DB::Settings & db_settings, Block & block)
 {
-    LOG_FMT_DEBUG(log, "{} table: {}.{}, rows: {}", __FUNCTION__, db_name, table_name, block.rows());
-
     EventRecorder write_block_recorder(ProfileEvents::DMWriteBlock, ProfileEvents::DMWriteBlockNS);
 
     const auto rows = block.rows();
@@ -477,19 +475,18 @@ void DeltaMergeStore::write(const Context & db_context, const DB::Settings & db_
     }
 
     // check block
-//    for (size_t i = 0; i < rows; i++)
-//    {
-//        auto handle_col = block.getByName(EXTRA_HANDLE_COLUMN_NAME);
-//        auto & pk_c = handle_col.column;
-//        auto ver_col = block.getByName(VERSION_COLUMN_NAME);
-//        auto & ver_c = ver_col.column;
-//        auto del_col = block.getByName(TAG_COLUMN_NAME);
-//        auto & del_c = del_col.column;
-//        if (del_c->getInt(i) == 1)
-//        {
-//            LOG_FMT_DEBUG(log, "Delete pk value {} version value {} tag value {}", pk_c->getInt(i), ver_c->getInt(i), del_c->getInt(i));
-//        }
-//    }
+    auto & pk_c = block.getByName(EXTRA_HANDLE_COLUMN_NAME).column;
+    auto & ver_c = block.getByName(VERSION_COLUMN_NAME).column;
+    auto & del_c = block.getByName(TAG_COLUMN_NAME).column;
+    if (rows > 1)
+    {
+        LOG_FMT_DEBUG(log, "{} table: {}.{}, rows: {}, first row: {} {} {}, last row: {} {} {}", __FUNCTION__, db_name, table_name, block.rows(), pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0), pk_c->getInt(rows - 1), ver_c->getInt(rows - 1), del_c->getInt(rows - 1));
+    }
+    else
+    {
+        // rows must be 1
+        LOG_FMT_DEBUG(log, "{} table: {}.{}, rows: {}, row: {} {} {}", __FUNCTION__, db_name, table_name, block.rows(), pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0));
+    }
 
     Segments updated_segments;
 

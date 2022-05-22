@@ -122,15 +122,18 @@ private:
             delete_col_data = getColumnVectorDataPtr<UInt8>(raw_block, delete_col_pos);
             if constexpr (MODE == DM_VERSION_FILTER_MODE_COMPACT)
             {
-                for (size_t i = 0; i < raw_block.rows(); i++)
+                auto rows = raw_block.rows();
+                auto & pk_c = raw_block.getByName(EXTRA_HANDLE_COLUMN_NAME).column;
+                auto & ver_c = raw_block.getByName(VERSION_COLUMN_NAME).column;
+                auto & del_c = raw_block.getByName(TAG_COLUMN_NAME).column;
+                if (rows > 1)
                 {
-                    auto handle_col = raw_block.getByName(EXTRA_HANDLE_COLUMN_NAME);
-                    auto & pk_c = handle_col.column;
-                    auto ver_col = raw_block.getByName(VERSION_COLUMN_NAME);
-                    auto & ver_c = ver_col.column;
-                    auto del_col = raw_block.getByName(TAG_COLUMN_NAME);
-                    auto & del_c = del_col.column;
-                    LOG_FMT_DEBUG(log, "DMVersionFilterBlockInputStream check pk value {} version value {} tag value {}", pk_c->getInt(i), ver_c->getInt(i), del_c->getInt(i));
+                    LOG_FMT_DEBUG(log, "{} rows: {}, first row: {} {} {}, last row: {} {} {}", __FUNCTION__, rows, pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0), pk_c->getInt(rows - 1), ver_c->getInt(rows - 1), del_c->getInt(rows - 1));
+                }
+                else
+                {
+                    // rows must be 1
+                    LOG_FMT_DEBUG(log, "{}  rows: {}, row: {} {} {}", __FUNCTION__, rows, pk_c->getInt(0), ver_c->getInt(0), del_c->getInt(0));
                 }
             }
             return true;

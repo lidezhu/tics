@@ -761,9 +761,10 @@ bool DMFile::canGC()
 
 void DMFile::enableGC()
 {
-    Poco::File ngc_file(ngcPath());
-    if (ngc_file.exists())
-        ngc_file.remove();
+    // keep all dmfiles
+//    Poco::File ngc_file(ngcPath());
+//    if (ngc_file.exists())
+//        ngc_file.remove();
 }
 
 void DMFile::remove(const FileProviderPtr & file_provider)
