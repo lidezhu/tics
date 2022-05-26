@@ -277,6 +277,8 @@ public:
 
     void drop(const FileProviderPtr & file_provider) { stable->drop(file_provider); }
 
+    bool isFlushing() const { return delta->isFlushing(); }
+
     RowsAndBytes getRowsAndBytesInRange(
         DMContext & dm_context,
         const SegmentSnapshotPtr & segment_snap,
