@@ -360,9 +360,6 @@ MinorCompactionPtr ColumnFilePersistedSet::pickUpMinorCompaction(DMContext & con
                     is_all_trivial_move = is_all_trivial_move && is_trivial_move;
                     cur_task = MinorCompaction::Task{cur_rows_offset, cur_deletes_offset};
                 };
-                cur_rows_offset += file->getRows();
-                cur_deletes_offset += file->getDeletes();
-
                 if (auto * t_file = file->tryToTinyFile(); t_file)
                 {
                     bool cur_task_full = cur_task.total_rows >= context.delta_small_column_file_rows;
@@ -385,6 +382,8 @@ MinorCompactionPtr ColumnFilePersistedSet::pickUpMinorCompaction(DMContext & con
                     pack_up_cur_task();
                     cur_task.addColumnFile(file);
                 }
+                cur_rows_offset += file->getRows();
+                cur_deletes_offset += file->getDeletes();
             }
             bool is_trivial_move = compaction->packUpTask(std::move(cur_task));
             is_all_trivial_move = is_all_trivial_move && is_trivial_move;
