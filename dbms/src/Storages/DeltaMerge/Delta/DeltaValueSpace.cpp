@@ -200,17 +200,20 @@ bool DeltaValueSpace::flush(DMContext & context)
         {
             LOG_FMT_DEBUG(log, "{} Stop flush because structure got updated", simpleInfo());
         }
-        else if (new_delta_index)
+        else
         {
-            /// Update delta tree and release the update status of delta index
-            delta_index = new_delta_index;
             success = true;
         }
-        is_delta_index_updating = false;
         if (success)
         {
+            /// Update delta tree
+            if (new_delta_index)
+            {
+                delta_index = new_delta_index;
+            }
             LOG_FMT_DEBUG(log, "{} Flush end. Flushed {} column files, {} rows and {} deletes.", info(), flush_task->getTaskNum(), flush_task->getFlushRows(), flush_task->getFlushDeletes());
         }
+        is_delta_index_updating = false;
     }
     delta_index_update_cv.notify_all();
     if (!success)
@@ -289,19 +292,21 @@ bool DeltaValueSpace::compact(DMContext & context)
         {
             LOG_FMT_WARNING(log, "Structure has been updated during compact");
             LOG_FMT_DEBUG(log, "{} Compact stop because structure got updated", simpleInfo());
-            return false;
         }
-        else if (new_delta_index)
+        else
         {
-            /// Update delta tree
-            delta_index = new_delta_index;
             success = true;
         }
-        is_delta_index_updating = false;
         if (success)
         {
+            /// Update delta tree
+            if (new_delta_index)
+            {
+                delta_index = new_delta_index;
+            }
             LOG_FMT_DEBUG(log, "{} {}", simpleInfo(), compaction_task->info());
         }
+        is_delta_index_updating = false;
     }
     delta_index_update_cv.notify_all();
     if (success)
