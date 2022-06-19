@@ -519,14 +519,33 @@ BlockInputStreamPtr Segment::getInputStreamRaw(const DMContext & dm_context,
     auto memtable_stream = delta_stream.getMemTableInputStream();
     auto persisted_files_stream = delta_stream.getPersistedFilesInputStream();
 
-    BlockInputStreamPtr stable_stream = segment_snap->stable->getInputStream(
-        dm_context,
-        *new_columns_to_read,
-        data_ranges,
-        filter,
-        std::numeric_limits<UInt64>::max(),
-        expected_block_size,
-        false);
+    BlockInputStreamPtr stable_stream;
+    if (segment_snap->delta->getRows() == 0 && segment_snap->delta->getDeletes() == 0 //
+        && !hasColumn(columns_to_read, EXTRA_HANDLE_COLUMN_ID) //
+        && !hasColumn(columns_to_read, VERSION_COLUMN_ID) //
+        && !hasColumn(columns_to_read, TAG_COLUMN_ID))
+    {
+        // No delta, let's try some optimizations.
+        stable_stream = segment_snap->stable->getInputStream(
+            dm_context,
+            *new_columns_to_read,
+            data_ranges,
+            filter,
+            std::numeric_limits<UInt64>::max(),
+            expected_block_size,
+            true);
+    }
+    else
+    {
+        stable_stream = segment_snap->stable->getInputStream(
+            dm_context,
+            *new_columns_to_read,
+            data_ranges,
+            filter,
+            std::numeric_limits<UInt64>::max(),
+            expected_block_size,
+            false);
+    }
 
     memtable_stream = std::make_shared<DMRowKeyFilterBlockInputStream<false>>(memtable_stream, data_ranges, 0);
     memtable_stream = std::make_shared<DMColumnFilterBlockInputStream>(memtable_stream, columns_to_read);
