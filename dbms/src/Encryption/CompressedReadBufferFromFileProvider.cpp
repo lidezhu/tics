@@ -33,7 +33,7 @@ bool CompressedReadBufferFromFileProvider<has_checksum>::nextImpl()
     if (!size_compressed)
         return false;
 
-    memory.resize(size_decompressed);
+    memory.resize(size_decompressed + 64);
     working_buffer = Buffer(&memory[0], &memory[size_decompressed]);
 
     this->decompress(working_buffer.begin(), size_decompressed, size_compressed_without_checksum);

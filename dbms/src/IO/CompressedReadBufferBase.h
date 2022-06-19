@@ -15,6 +15,7 @@
 #pragma once
 
 #include <Common/PODArray.h>
+#include <IO/LZ4_decompress_faster.h>
 
 
 namespace DB
@@ -27,6 +28,9 @@ class ReadBuffer;
 template <bool has_checksum = true>
 class CompressedReadBufferBase
 {
+private:
+    mutable LZ4::PerformanceStatistics lz4_stat;
+
 protected:
     ReadBuffer * compressed_in;
 

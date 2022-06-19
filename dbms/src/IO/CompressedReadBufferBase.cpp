@@ -85,9 +85,11 @@ size_t CompressedReadBufferBase<has_checksum>::readCompressedData(size_t & size_
 
     ProfileEvents::increment(ProfileEvents::ReadCompressedBytes, size_compressed + sizeof(checksum));
 
+    auto additional_size_at_the_end_of_buffer = 64;
+
     /// Is whole compressed block located in 'compressed_in' buffer?
     if (compressed_in->offset() >= COMPRESSED_BLOCK_HEADER_SIZE
-        && compressed_in->position() + size_compressed - COMPRESSED_BLOCK_HEADER_SIZE <= compressed_in->buffer().end())
+        && compressed_in->position() + size_compressed - COMPRESSED_BLOCK_HEADER_SIZE + additional_size_at_the_end_of_buffer <= compressed_in->buffer().end())
     {
         compressed_in->position() -= COMPRESSED_BLOCK_HEADER_SIZE;
         compressed_buffer = compressed_in->position();
@@ -95,7 +97,7 @@ size_t CompressedReadBufferBase<has_checksum>::readCompressedData(size_t & size_
     }
     else
     {
-        own_compressed_buffer.resize(size_compressed);
+        own_compressed_buffer.resize(size_compressed + additional_size_at_the_end_of_buffer);
         compressed_buffer = &own_compressed_buffer[0];
         compressed_in->readStrict(compressed_buffer + COMPRESSED_BLOCK_HEADER_SIZE, size_compressed - COMPRESSED_BLOCK_HEADER_SIZE);
     }
@@ -122,7 +124,8 @@ void CompressedReadBufferBase<has_checksum>::decompress(char * to, size_t size_d
 
     if (method == static_cast<UInt8>(CompressionMethodByte::LZ4))
     {
-        if (LZ4_decompress_fast(compressed_buffer + COMPRESSED_BLOCK_HEADER_SIZE, to, size_decompressed) < 0)
+
+        if (!LZ4::decompress(compressed_buffer + COMPRESSED_BLOCK_HEADER_SIZE, to, size_compressed_without_checksum - COMPRESSED_BLOCK_HEADER_SIZE, size_decompressed, lz4_stat))
             throw Exception("Cannot LZ4_decompress_fast", ErrorCodes::CANNOT_DECOMPRESS);
     }
     else if (method == static_cast<UInt8>(CompressionMethodByte::ZSTD))
