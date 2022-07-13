@@ -64,9 +64,12 @@ ControlOptions ControlOptions::parse(int argc, char ** argv)
         ("paths,P", value<std::vector<std::string>>(), "store path(s)") //
         ("display_mode,D", value<int>()->default_value(1), "Display Mode: 1 is summary information,\n 2 is display all of stored page and version chain(will be very long),\n 3 is display all blobs(in disk) data distribution. \n 4 is check every data is valid.") //
         ("enable_fo_check,E", value<bool>()->default_value(true), "Also check the entry field offsets. This options only works when `display_mode` is 4.") //
-        ("query_ns_id,N", value<UInt64>()->default_value(DB::TEST_NAMESPACE_ID), "When used `check_page_id`/`query_page_id`/`query_blob_id` to query results. You can specify a namespace id.")("check_page_id,C", value<UInt64>()->default_value(UINT64_MAX), "Check a single Page id, display the exception if meet. And also will check the field offsets.") //
+        ("query_ns_id,N", value<UInt64>()->default_value(DB::TEST_NAMESPACE_ID), "When used `check_page_id`/`query_page_id`/`query_blob_id` to query results. You can specify a namespace id.") //
+        ("check_page_id,C", value<UInt64>()->default_value(UINT64_MAX), "Check a single Page id, display the exception if meet. And also will check the field offsets.") //
         ("query_page_id,W", value<UInt64>()->default_value(UINT64_MAX), "Query a single Page id, and print its version chain.") //
-        ("query_blob_id,B", value<UInt32>()->default_value(UINT32_MAX), "Query a single Blob id, and print its data distribution.")("imitative,I", value<bool>()->default_value(true), "Use imitative context instead. (encryption is not supported in this mode so that no need to set config_file_path)")("config_file_path", value<std::string>(), "Path to TiFlash config (tiflash.toml).");
+        ("query_blob_id,B", value<UInt32>()->default_value(UINT32_MAX), "Query a single Blob id, and print its data distribution.") //
+        ("imitative,I", value<bool>()->default_value(true), "Use imitative context instead. (encryption is not supported in this mode so that no need to set config_file_path)") //
+        ("config_file_path", value<std::string>(), "Path to TiFlash config (tiflash.toml).");
 
 
     static_assert(sizeof(DB::PageId) == sizeof(UInt64));
@@ -337,8 +340,8 @@ private:
 
     static String getSummaryInfo(PageDirectory::MVCCMapType & mvcc_table_directory, BlobStore & blob_store)
     {
-        UInt64 longest_version_chaim = 0;
-        UInt64 shortest_version_chaim = UINT64_MAX;
+        UInt64 longest_version_chain = 0;
+        UInt64 shortest_version_chain = UINT64_MAX;
         FmtBuffer dir_summary_info;
 
         dir_summary_info.append("  Directory summary info: \n");
@@ -346,14 +349,14 @@ private:
         for (const auto & [internal_id, versioned_entries] : mvcc_table_directory)
         {
             (void)internal_id;
-            longest_version_chaim = std::max(longest_version_chaim, versioned_entries->size());
-            shortest_version_chaim = std::min(shortest_version_chaim, versioned_entries->size());
+            longest_version_chain = std::max(longest_version_chain, versioned_entries->size());
+            shortest_version_chain = std::min(shortest_version_chain, versioned_entries->size());
         }
 
-        dir_summary_info.fmtAppend("    total pages: {}, longest version chaim: {} , shortest version chaim: {} \n\n",
+        dir_summary_info.fmtAppend("    total pages: {}, longest version chain: {} , shortest version chain: {} \n\n",
                                    mvcc_table_directory.size(),
-                                   longest_version_chaim,
-                                   shortest_version_chaim);
+                                   longest_version_chain,
+                                   shortest_version_chain);
 
         dir_summary_info.append("  Blobs summary info: \n");
         const auto & blob_stats = blob_store.blob_stats.getStats();
