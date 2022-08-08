@@ -405,12 +405,17 @@ String genericChoosePath(const std::vector<T> & paths, //
 
     double rand_number = static_cast<double>(rand()) / RAND_MAX; // NOLINT(cert-msc50-cpp)
     double ratio_sum = 0.0;
+    String all_ratio_string = "";
+    for (size_t i = 0; i < ratio.size(); i++)
+    {
+        all_ratio_string += std::to_string(ratio[i]) + ",";
+    }
     for (size_t i = 0; i < ratio.size(); i++)
     {
         ratio_sum += ratio[i];
         if ((rand_number < ratio_sum) || (i == ratio.size() - 1))
         {
-            LOG_FMT_INFO(log, "Choose path [index={}] {}", i, log_msg);
+            LOG_FMT_INFO(log, "Choose path [index={}] rand_number {} all ratio {} {}", i, rand_number, all_ratio_string, log_msg);
             return path_generator(paths, i);
         }
     }
