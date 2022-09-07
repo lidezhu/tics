@@ -96,6 +96,7 @@ public:
     // clang-format on
 #endif
 
+    template <typename>
     friend class PageDirectoryFactory;
     friend class PageStorageControlV3;
 #ifndef DBMS_PUBLIC_GTEST
@@ -141,9 +142,9 @@ private:
 
     LoggerPtr log;
 
-    PageDirectoryPtr page_directory;
+    u128::PageDirectoryPtr page_directory;
 
-    BlobStore blob_store;
+    BlobStore<u128::BlobStoreTrait> blob_store;
 
     std::atomic<bool> gc_is_running = false;
 
