@@ -19,6 +19,7 @@
 #include <Encryption/FileProvider.h>
 #include <Storages/Page/PageDefines.h>
 #include <Storages/Page/PageStorage.h>
+#include <Storages/Page/V3/BlobStore.h>
 #include <Storages/Page/V3/PageDirectory.h>
 #include <Storages/Page/V3/PageDirectoryFactory.h>
 #include <Storages/Page/V3/PageEntriesEdit.h>
@@ -61,7 +62,7 @@ void PageStorageImpl::restore()
     // TODO: Speedup restoring
     blob_store.registerPaths();
 
-    PageDirectoryFactory factory;
+    u128::PageDirectoryFactory factory;
     page_directory = factory
                          .setBlobStore(blob_store)
                          .create(storage_name, file_provider, delegator, parseWALConfig(config));
@@ -190,7 +191,7 @@ PageMap PageStorageImpl::readImpl(NamespaceId ns_id, const PageIds & page_ids, c
         {
             Page page_not_found;
             page_not_found.page_id = INVALID_PAGE_ID;
-            page_map[page_id_not_found] = page_not_found;
+            page_map[page_id_not_found.low] = page_not_found;
         }
         return page_map;
     }
@@ -217,7 +218,12 @@ PageIds PageStorageImpl::readImpl(NamespaceId ns_id, const PageIds & page_ids, c
     {
         auto [page_entries, page_ids_not_found] = page_directory->getByIDsOrNull(page_id_v3s, snapshot);
         blob_store.read(page_entries, handler, read_limiter);
-        return page_ids_not_found;
+        PageIds page_ids_not_found_u64(page_ids_not_found.size());
+        for (size_t index = 0; index < page_ids_not_found.size(); ++index)
+        {
+            page_ids_not_found_u64[index] = page_ids_not_found[index].low;
+        }
+        return page_ids_not_found_u64;
     }
 }
 
@@ -228,7 +234,7 @@ PageMap PageStorageImpl::readImpl(NamespaceId ns_id, const std::vector<PageReadF
         snapshot = this->getSnapshot("");
     }
 
-    BlobStore::FieldReadInfos read_infos;
+    u128::BlobStoreTrait::FieldReadInfos read_infos;
     PageIds page_ids_not_found;
     for (const auto & [page_id, field_indices] : page_fields)
     {
@@ -236,7 +242,7 @@ PageMap PageStorageImpl::readImpl(NamespaceId ns_id, const std::vector<PageReadF
 
         if (entry.isValid())
         {
-            auto info = BlobStore::FieldReadInfo(buildV3Id(ns_id, page_id), entry, field_indices);
+            auto info = u128::BlobStoreTrait::FieldReadInfo(buildV3Id(ns_id, page_id), entry, field_indices);
             read_infos.emplace_back(info);
         }
         else
@@ -453,7 +459,7 @@ PageStorageImpl::GCTimeStatistics PageStorageImpl::doGC(const WriteLimiterPtr & 
     // 5. Do the BlobStore GC
     // After BlobStore GC, these entries will be migrated to a new blob.
     // Then we should notify MVCC apply the change.
-    PageEntriesEdit gc_edit = blob_store.gc(blob_gc_info, total_page_size, write_limiter, read_limiter);
+    u128::PageEntriesEdit gc_edit = blob_store.gc(blob_gc_info, total_page_size, write_limiter, read_limiter);
     statistics.full_gc_blobstore_copy_ms = gc_watch.elapsedMillisecondsFromLastTime();
     RUNTIME_CHECK_MSG(!gc_edit.empty(), "Something wrong after BlobStore GC");
 

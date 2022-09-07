@@ -29,15 +29,19 @@ extern const int PS_DIR_APPLY_INVALID_STATUS;
 } // namespace ErrorCodes
 namespace PS::V3
 {
-PageDirectoryPtr PageDirectoryFactory::create(String storage_name, FileProviderPtr & file_provider, PSDiskDelegatorPtr & delegator, WALConfig config)
+template <typename Trait>
+typename Trait::PageDirectoryPtr
+PageDirectoryFactory<Trait>::create(String storage_name, FileProviderPtr & file_provider, PSDiskDelegatorPtr & delegator, WALConfig config)
 {
     auto [wal, reader] = WALStore::create(storage_name, file_provider, delegator, config);
     return createFromReader(storage_name, reader, std::move(wal));
 }
 
-PageDirectoryPtr PageDirectoryFactory::createFromReader(String storage_name, WALStoreReaderPtr reader, WALStorePtr wal, bool for_dump_snapshot)
+template <typename Trait>
+typename Trait::PageDirectoryPtr
+PageDirectoryFactory<Trait>::createFromReader(String storage_name, WALStoreReaderPtr reader, WALStorePtr wal, bool for_dump_snapshot)
 {
-    PageDirectoryPtr dir = std::make_unique<PageDirectory>(storage_name, std::move(wal));
+    typename Trait::PageDirectoryPtr dir = std::make_unique<typename Trait::PageDirectoryType>(storage_name, std::move(wal));
     loadFromDisk(dir, std::move(reader));
 
     // Reset the `sequence` to the maximum of persisted.
@@ -75,11 +79,13 @@ PageDirectoryPtr PageDirectoryFactory::createFromReader(String storage_name, WAL
     return dir;
 }
 
-PageDirectoryPtr PageDirectoryFactory::createFromEdit(String storage_name, FileProviderPtr & file_provider, PSDiskDelegatorPtr & delegator, const PageEntriesEdit & edit)
+template <typename Trait>
+typename Trait::PageDirectoryPtr
+PageDirectoryFactory<Trait>::createFromEdit(String storage_name, FileProviderPtr & file_provider, PSDiskDelegatorPtr & delegator, const typename Trait::PageEntriesEdit & edit)
 {
     auto [wal, reader] = WALStore::create(storage_name, file_provider, delegator, WALConfig());
     (void)reader;
-    PageDirectoryPtr dir = std::make_unique<PageDirectory>(std::move(storage_name), std::move(wal));
+    typename Trait::PageDirectoryPtr dir = std::make_unique<typename Trait::PageDirectoryType>(std::move(storage_name), std::move(wal));
     loadEdit(dir, edit);
     // Reset the `sequence` to the maximum of persisted.
     dir->sequence = max_applied_ver.sequence;
@@ -114,7 +120,8 @@ PageDirectoryPtr PageDirectoryFactory::createFromEdit(String storage_name, FileP
     return dir;
 }
 
-void PageDirectoryFactory::loadEdit(const PageDirectoryPtr & dir, const PageEntriesEdit & edit)
+template <typename Trait>
+void PageDirectoryFactory<Trait>::loadEdit(const typename Trait::PageDirectoryPtr & dir, const typename Trait::PageEntriesEdit & edit)
 {
     for (const auto & r : edit.getRecords())
     {
@@ -125,14 +132,15 @@ void PageDirectoryFactory::loadEdit(const PageDirectoryPtr & dir, const PageEntr
     }
 }
 
-void PageDirectoryFactory::applyRecord(
-    const PageDirectoryPtr & dir,
-    const PageEntriesEdit::EditRecord & r)
+template <typename Trait>
+void PageDirectoryFactory<Trait>::applyRecord(
+    const typename Trait::PageDirectoryPtr & dir,
+    const typename Trait::PageEntriesEdit::EditRecord & r)
 {
     auto [iter, created] = dir->mvcc_table_directory.insert(std::make_pair(r.page_id, nullptr));
     if (created)
     {
-        iter->second = std::make_shared<VersionedPageEntries>();
+        iter->second = std::make_shared<VersionedPageEntries<PageDirectoryInt128Trait>>();
     }
 
     dir->max_page_id = std::max(dir->max_page_id, r.page_id.low);
@@ -175,7 +183,7 @@ void PageDirectoryFactory::applyRecord(
             version_list->createDelete(restored_version);
             break;
         case EditRecordType::REF:
-            PageDirectory::applyRefEditRecord(
+            Trait::PageDirectoryType::applyRefEditRecord(
                 dir->mvcc_table_directory,
                 version_list,
                 r,
@@ -193,7 +201,8 @@ void PageDirectoryFactory::applyRecord(
     }
 }
 
-void PageDirectoryFactory::loadFromDisk(const PageDirectoryPtr & dir, WALStoreReaderPtr && reader)
+template <typename Trait>
+void PageDirectoryFactory<Trait>::loadFromDisk(const typename Trait::PageDirectoryPtr & dir, WALStoreReaderPtr && reader)
 {
     while (reader->remained())
     {
@@ -213,5 +222,8 @@ void PageDirectoryFactory::loadFromDisk(const PageDirectoryPtr & dir, WALStoreRe
         loadEdit(dir, edit);
     }
 }
+
+template class PageDirectoryFactory<u128::FactoryTrait>;
+// template class PageDirectoryFactory<universal::FactoryTrait>;
 } // namespace PS::V3
 } // namespace DB

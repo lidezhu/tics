@@ -67,7 +67,8 @@ using ChecksumClass = Digest::CRC64;
   * BlobStore methods *
   *********************/
 
-BlobStore::BlobStore(String storage_name, const FileProviderPtr & file_provider_, PSDiskDelegatorPtr delegator_, const BlobConfig & config_)
+template <typename Trait>
+BlobStore<Trait>::BlobStore(String storage_name, const FileProviderPtr & file_provider_, PSDiskDelegatorPtr delegator_, const BlobConfig & config_)
     : delegator(std::move(delegator_))
     , file_provider(file_provider_)
     , config(config_)
@@ -77,7 +78,8 @@ BlobStore::BlobStore(String storage_name, const FileProviderPtr & file_provider_
 {
 }
 
-void BlobStore::registerPaths()
+template <typename Trait>
+void BlobStore<Trait>::registerPaths()
 {
     for (const auto & path : delegator->listPaths())
     {
@@ -111,7 +113,8 @@ void BlobStore::registerPaths()
     }
 }
 
-void BlobStore::reloadConfig(const BlobConfig & rhs)
+template <typename Trait>
+void BlobStore<Trait>::reloadConfig(const BlobConfig & rhs)
 {
     // Currently, we don't add any config for `file_limit_size`, so it won't reload at run time.
     // And if we support it in the future(although it seems there is no need to do that),
@@ -125,7 +128,8 @@ void BlobStore::reloadConfig(const BlobConfig & rhs)
     config.heavy_gc_valid_rate = rhs.heavy_gc_valid_rate;
 }
 
-FileUsageStatistics BlobStore::getFileUsageStatistics() const
+template <typename Trait>
+FileUsageStatistics BlobStore<Trait>::getFileUsageStatistics() const
 {
     FileUsageStatistics usage;
 
@@ -157,9 +161,11 @@ FileUsageStatistics BlobStore::getFileUsageStatistics() const
     return usage;
 }
 
-PageEntriesEdit BlobStore::handleLargeWrite(DB::WriteBatch & wb, const WriteLimiterPtr & write_limiter)
+template <typename Trait>
+typename Trait::PageEntriesEditType
+BlobStore<Trait>::handleLargeWrite(DB::WriteBatch & wb, const WriteLimiterPtr & write_limiter)
 {
-    PageEntriesEdit edit;
+    typename Trait::PageEntriesEditType edit;
     for (auto & write : wb.getWrites())
     {
         switch (write.type)
@@ -237,13 +243,15 @@ PageEntriesEdit BlobStore::handleLargeWrite(DB::WriteBatch & wb, const WriteLimi
     return edit;
 }
 
-PageEntriesEdit BlobStore::write(DB::WriteBatch & wb, const WriteLimiterPtr & write_limiter)
+template <typename Trait>
+typename Trait::PageEntriesEditType
+BlobStore<Trait>::write(DB::WriteBatch & wb, const WriteLimiterPtr & write_limiter)
 {
     ProfileEvents::increment(ProfileEvents::PSMWritePages, wb.putWriteCount());
 
     const size_t all_page_data_size = wb.getTotalDataSize();
 
-    PageEntriesEdit edit;
+    typename Trait::PageEntriesEditType edit;
 
     if (all_page_data_size == 0)
     {
@@ -399,7 +407,8 @@ PageEntriesEdit BlobStore::write(DB::WriteBatch & wb, const WriteLimiterPtr & wr
     return edit;
 }
 
-void BlobStore::remove(const PageEntriesV3 & del_entries)
+template <typename Trait>
+void BlobStore<Trait>::remove(const PageEntriesV3 & del_entries)
 {
     std::set<BlobFileId> blob_updated;
     for (const auto & entry : del_entries)
@@ -447,7 +456,8 @@ void BlobStore::remove(const PageEntriesV3 & del_entries)
     }
 }
 
-std::pair<BlobFileId, BlobFileOffset> BlobStore::getPosFromStats(size_t size)
+template <typename Trait>
+std::pair<BlobFileId, BlobFileOffset> BlobStore<Trait>::getPosFromStats(size_t size)
 {
     BlobStatPtr stat;
 
@@ -497,7 +507,8 @@ std::pair<BlobFileId, BlobFileOffset> BlobStore::getPosFromStats(size_t size)
     return std::make_pair(stat->id, offset);
 }
 
-void BlobStore::removePosFromStats(BlobFileId blob_id, BlobFileOffset offset, size_t size)
+template <typename Trait>
+void BlobStore<Trait>::removePosFromStats(BlobFileId blob_id, BlobFileOffset offset, size_t size)
 {
     bool need_remove_stat = false;
     const auto & stat = blob_stats.blobIdToStat(blob_id);
@@ -523,7 +534,8 @@ void BlobStore::removePosFromStats(BlobFileId blob_id, BlobFileOffset offset, si
     }
 }
 
-void BlobStore::read(PageIDAndEntriesV3 & entries, const PageHandler & handler, const ReadLimiterPtr & read_limiter)
+template <typename Trait>
+void BlobStore<Trait>::read(typename Trait::PageIDAndEntries & entries, const typename Trait::PageHandler & handler, const ReadLimiterPtr & read_limiter)
 {
     if (entries.empty())
     {
@@ -590,7 +602,8 @@ void BlobStore::read(PageIDAndEntriesV3 & entries, const PageHandler & handler, 
     }
 }
 
-PageMap BlobStore::read(FieldReadInfos & to_read, const ReadLimiterPtr & read_limiter)
+template <typename Trait>
+typename Trait::PageMap BlobStore<Trait>::read(typename Trait::FieldReadInfos & to_read, const ReadLimiterPtr & read_limiter)
 {
     if (to_read.empty())
     {
@@ -603,7 +616,7 @@ PageMap BlobStore::read(FieldReadInfos & to_read, const ReadLimiterPtr & read_li
     std::sort(
         to_read.begin(),
         to_read.end(),
-        [](const FieldReadInfo & a, const FieldReadInfo & b) { return a.entry.offset < b.entry.offset; });
+        [](const typename Trait::FieldReadInfo & a, const typename Trait::FieldReadInfo & b) { return a.entry.offset < b.entry.offset; });
 
     // allocate data_buf that can hold all pages with specify fields
 
@@ -692,7 +705,8 @@ PageMap BlobStore::read(FieldReadInfos & to_read, const ReadLimiterPtr & read_li
     return page_map;
 }
 
-PageMap BlobStore::read(PageIDAndEntriesV3 & entries, const ReadLimiterPtr & read_limiter)
+template <typename Trait>
+typename Trait::PageMap BlobStore<Trait>::read(typename Trait::PageIDAndEntries & entries, const ReadLimiterPtr & read_limiter)
 {
     if (entries.empty())
     {
@@ -774,7 +788,8 @@ PageMap BlobStore::read(PageIDAndEntriesV3 & entries, const ReadLimiterPtr & rea
     return page_map;
 }
 
-Page BlobStore::read(const PageIDAndEntryV3 & id_entry, const ReadLimiterPtr & read_limiter)
+template <typename Trait>
+typename Trait::Page BlobStore<Trait>::read(const typename Trait::PageIDAndEntry & id_entry, const ReadLimiterPtr & read_limiter)
 {
     if (!id_entry.second.isValid())
     {
@@ -825,7 +840,15 @@ Page BlobStore::read(const PageIDAndEntryV3 & id_entry, const ReadLimiterPtr & r
     return page;
 }
 
-BlobFilePtr BlobStore::read(const PageIdV3Internal & page_id_v3, BlobFileId blob_id, BlobFileOffset offset, char * buffers, size_t size, const ReadLimiterPtr & read_limiter, bool background)
+template <typename Trait>
+BlobFilePtr BlobStore<Trait>::read(
+    const typename Trait::PageID & page_id_v3,
+    BlobFileId blob_id,
+    BlobFileOffset offset,
+    char * buffers,
+    size_t size,
+    const ReadLimiterPtr & read_limiter,
+    bool background)
 {
     assert(buffers != nullptr);
     BlobFilePtr blob_file = getBlobFile(blob_id);
@@ -933,7 +956,8 @@ private:
     }
 };
 
-std::vector<BlobFileId> BlobStore::getGCStats()
+template <typename Trait>
+std::vector<BlobFileId> BlobStore<Trait>::getGCStats()
 {
     // Get a copy of stats map to avoid the big lock on stats map
     const auto stats_list = blob_stats.getStats();
@@ -1037,13 +1061,15 @@ std::vector<BlobFileId> BlobStore::getGCStats()
 }
 
 
-PageEntriesEdit BlobStore::gc(std::map<BlobFileId, PageIdAndVersionedEntries> & entries_need_gc,
-                              const PageSize & total_page_size,
-                              const WriteLimiterPtr & write_limiter,
-                              const ReadLimiterPtr & read_limiter)
+template <typename Trait>
+typename Trait::PageEntriesEditType
+BlobStore<Trait>::gc(typename Trait::GcEntriesMap & entries_need_gc,
+                     const PageSize & total_page_size,
+                     const WriteLimiterPtr & write_limiter,
+                     const ReadLimiterPtr & read_limiter)
 {
     std::vector<std::tuple<BlobFileId, BlobFileOffset, PageSize>> written_blobs;
-    PageEntriesEdit edit;
+    PageEntriesEdit<typename Trait::PageID> edit;
 
     if (total_page_size == 0)
     {
@@ -1189,7 +1215,8 @@ PageEntriesEdit BlobStore::gc(std::map<BlobFileId, PageIdAndVersionedEntries> & 
 }
 
 
-String BlobStore::getBlobFileParentPath(BlobFileId blob_id)
+template <typename Trait>
+String BlobStore<Trait>::getBlobFileParentPath(BlobFileId blob_id)
 {
     PageFileIdAndLevel id_lvl{blob_id, 0};
     String parent_path = delegator->getPageFilePath(id_lvl);
@@ -1200,13 +1227,16 @@ String BlobStore::getBlobFileParentPath(BlobFileId blob_id)
     return parent_path;
 }
 
-BlobFilePtr BlobStore::getBlobFile(BlobFileId blob_id)
+template <typename Trait>
+BlobFilePtr BlobStore<Trait>::getBlobFile(BlobFileId blob_id)
 {
     return cached_files.getOrSet(blob_id, [this, blob_id]() -> BlobFilePtr {
                            return std::make_shared<BlobFile>(getBlobFileParentPath(blob_id), blob_id, file_provider, delegator);
                        })
         .first;
 }
+
+template class BlobStore<u128::BlobStoreTrait>;
 
 } // namespace PS::V3
 } // namespace DB
