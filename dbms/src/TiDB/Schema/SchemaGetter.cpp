@@ -155,6 +155,7 @@ void AffectedOption::deserialize(Poco::JSON::Object::Ptr json)
 
 void SchemaDiff::deserialize(const String & data)
 {
+    LOG_FMT_DEBUG(Logger::get("SchemaDiff::deserialize"), "schema diff raw data {}", data);
     Poco::JSON::Parser parser;
     Poco::Dynamic::Var result = parser.parse(data);
     auto obj = result.extract<Poco::JSON::Object::Ptr>();
