@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <Common/Exception.h>
+#include <Common/FailPoint.h>
 #include <Common/SyncPoint/SyncPoint.h>
 #include <Common/TiFlashMetrics.h>
 #include <DataStreams/ConcatBlockInputStream.h>
@@ -94,7 +95,10 @@ namespace ErrorCodes
 extern const int LOGICAL_ERROR;
 extern const int UNKNOWN_FORMAT_VERSION;
 } // namespace ErrorCodes
-
+namespace FailPoints
+{
+extern const char force_exit_before_finalize_dmfile[];
+} // namespace FailPoints
 namespace DM
 {
 const static size_t SEGMENT_BUFFER_SIZE = 128; // More than enough.
@@ -151,6 +155,10 @@ DMFilePtr writeIntoNewDMFile(DMContext & dm_context, //
         block_property.gc_hint_version = gc_hint_version;
         output_stream->write(block, block_property);
     }
+
+    fiu_do_on(FailPoints::force_exit_before_finalize_dmfile, {
+        exit(1);
+    });
 
     input_stream->readSuffix();
     output_stream->writeSuffix();
