@@ -156,6 +156,7 @@ DMFilePtr writeIntoNewDMFile(DMContext & dm_context, //
         output_stream->write(block, block_property);
     }
 
+    LOG_FMT_DEBUG(&Poco::Logger::get("writeIntoNewDMFile"), "write into new dmfile {}", file_id);
     fiu_do_on(FailPoints::force_exit_before_finalize_dmfile, {
         exit(1);
     });
