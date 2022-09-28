@@ -50,13 +50,6 @@ struct EncryptionPath;
 
 #endif
 
-// TODO: OpenSSL Lib does not export SM4_BLOCK_SIZE by now.
-// Need to remove SM4_BLOCK_SIZE once Openssl lib support the definition.
-// SM4 uses 128-bit block size as AES.
-// Ref:
-// https://github.com/openssl/openssl/blob/OpenSSL_1_1_1-stable/include/crypto/sm4.h#L24
-#define SM4_BLOCK_SIZE 16
-
 struct FileEncryptionInfo;
 
 class AESCTRCipherStream : public BlockAccessCipherStream
@@ -99,6 +92,8 @@ public:
 
 private:
     void cipher(uint64_t file_offset, char * data, size_t data_size, bool is_encrypt);
+
+    inline void initIV(uint64_t block_index, unsigned char * iv) const;
 
     const EVP_CIPHER * cipher_;
     const std::string key_;
