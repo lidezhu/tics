@@ -19,7 +19,6 @@
 #include <Storages/Transaction/FileEncryption.h>
 
 #include <cassert>
-#include <cstddef>
 #include <ext/scope_guard.h>
 #include <limits>
 
@@ -261,8 +260,12 @@ BlockAccessCipherStreamPtr AESCTRCipherStream::createCipherStream(
         cipher = EVP_aes_256_ctr();
         break;
     case EncryptionMethod::SM4Ctr:
-#if OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4)
+#if USE_INTERNAL_SSL_LIBRARY
         // Use sm4 in GmSSL, don't need to do anything here
+        break;
+#elif OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4)
+        throw DB::TiFlashException("Unsupported encryption method: " + std::to_string(static_cast<int>(encryption_info_.method)),
+                                   Errors::Encryption::Internal);
 #else
         // Openssl support SM4 after 1.1.1 release version.
         cipher = EVP_sm4_ctr();
