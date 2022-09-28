@@ -17,7 +17,6 @@
 #include <Encryption/AESCTRCipherStream.h>
 #include <Encryption/KeyManager.h>
 #include <Storages/Transaction/FileEncryption.h>
-#include <gmssl/sm4.h>
 
 #include <cassert>
 #include <cstddef>
@@ -72,11 +71,9 @@ void AESCTRCipherStream::cipher(uint64_t file_offset, char * data, size_t data_s
     (void)is_encrypt;
     throw Exception("OpenSSL version < 1.0.2", ErrorCodes::NOT_IMPLEMENTED);
 #else
+#if USE_INTERNAL_SSL_LIBRARY
     if (cipher_ == nullptr)
     {
-        // use sm4 in GmSSL
-        SM4_KEY sm4_key;
-        sm4_set_encrypt_key(&sm4_key, reinterpret_cast<const uint8_t *>(key_.c_str()));
         const size_t block_size = blockSize();
         uint64_t block_index = file_offset / block_size;
         uint64_t block_offset = file_offset % block_size;
@@ -97,11 +94,11 @@ void AESCTRCipherStream::cipher(uint64_t file_offset, char * data, size_t data_s
             if (is_encrypt)
             {
                 // TODO: check iv have been updated
-                sm4_ctr_encrypt(&sm4_key, iv, partial_block, block_size, partial_block);
+                sm4_ctr_encrypt(&sm4_key_, iv, partial_block, block_size, partial_block);
             }
             else
             {
-                sm4_ctr_decrypt(&sm4_key, iv, partial_block, block_size, partial_block);
+                sm4_ctr_decrypt(&sm4_key_, iv, partial_block, block_size, partial_block);
             }
             memcpy(data, partial_block + block_offset, partial_block_size);
             data_offset += partial_block_size;
@@ -115,11 +112,11 @@ void AESCTRCipherStream::cipher(uint64_t file_offset, char * data, size_t data_s
             unsigned char * full_blocks = reinterpret_cast<unsigned char *>(data) + data_offset;
             if (is_encrypt)
             {
-                sm4_ctr_encrypt(&sm4_key, iv, full_blocks, actual_data_size, full_blocks);
+                sm4_ctr_encrypt(&sm4_key_, iv, full_blocks, actual_data_size, full_blocks);
             }
             else
             {
-                sm4_ctr_decrypt(&sm4_key, iv, full_blocks, actual_data_size, full_blocks);
+                sm4_ctr_decrypt(&sm4_key_, iv, full_blocks, actual_data_size, full_blocks);
             }
             data_offset += actual_data_size;
             remaining_data_size -= actual_data_size;
@@ -133,17 +130,18 @@ void AESCTRCipherStream::cipher(uint64_t file_offset, char * data, size_t data_s
             memcpy(partial_block, data + data_offset, remaining_data_size);
             if (is_encrypt)
             {
-                sm4_ctr_encrypt(&sm4_key, iv, partial_block, block_size, partial_block);
+                sm4_ctr_encrypt(&sm4_key_, iv, partial_block, block_size, partial_block);
             }
             else
             {
-                sm4_ctr_decrypt(&sm4_key, iv, partial_block, block_size, partial_block);
+                sm4_ctr_decrypt(&sm4_key_, iv, partial_block, block_size, partial_block);
             }
             memcpy(data + data_offset, partial_block, remaining_data_size);
         }
     }
     else
     {
+#endif
         int ret = 1;
         EVP_CIPHER_CTX * ctx = nullptr;
         InitCipherContext(ctx);
@@ -219,7 +217,9 @@ void AESCTRCipherStream::cipher(uint64_t file_offset, char * data, size_t data_s
                               output_size);
             memcpy(data + data_offset, partial_block, remaining_data_size);
         }
+#if USE_INTERNAL_SSL_LIBRARY
     }
+#endif
 #endif
 }
 
@@ -262,8 +262,7 @@ BlockAccessCipherStreamPtr AESCTRCipherStream::createCipherStream(
         break;
     case EncryptionMethod::SM4Ctr:
 #if OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4)
-        throw DB::TiFlashException("Unsupported encryption method: " + std::to_string(static_cast<int>(encryption_info_.method)),
-                                   Errors::Encryption::Internal);
+        // Use sm4 in GmSSL, don't need to do anything here
 #else
         // Openssl support SM4 after 1.1.1 release version.
         cipher = EVP_sm4_ctr();

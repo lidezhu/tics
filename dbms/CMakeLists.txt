@@ -213,9 +213,12 @@ target_link_libraries (dbms
     ${OPENSSL_CRYPTO_LIBRARY}
     ${BTRIE_LIBRARIES}
     absl::synchronization
-    gmssl
 )
-target_include_directories(dbms PRIVATE ${TiFlash_SOURCE_DIR}/contrib/GmSSL/include)
+
+if (USE_INTERNAL_SSL_LIBRARY)
+    target_link_libraries(dbms gmssl)
+    target_include_directories(dbms PRIVATE ${TiFlash_SOURCE_DIR}/contrib/GmSSL/include)
+endif ()
 
 if (NOT USE_INTERNAL_RE2_LIBRARY)
     target_include_directories (dbms BEFORE PRIVATE ${RE2_INCLUDE_DIR})
