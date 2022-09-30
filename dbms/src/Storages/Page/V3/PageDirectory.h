@@ -163,15 +163,15 @@ public:
 
     void createNewEntry(const PageVersion & ver, const PageEntryV3 & entry);
 
-    bool createNewRef(const PageVersion & ver, typename Trait::PageID ori_page_id);
+    bool createNewRef(const PageVersion & ver, const typename Trait::PageId & ori_page_id);
 
-    typename Trait::PageIDSharedPtr createNewExternal(const PageVersion & ver);
+    typename Trait::PageIdSharedPtr createNewExternal(const PageVersion & ver);
 
     void createDelete(const PageVersion & ver);
 
-    typename Trait::PageIDSharedPtr fromRestored(const typename Trait::EditRecord & rec);
+    typename Trait::PageIdSharedPtr fromRestored(const typename Trait::EditRecord & rec);
 
-    std::tuple<ResolveResult, typename Trait::PageID, PageVersion>
+    std::tuple<ResolveResult, typename Trait::PageId, PageVersion>
     resolveToPageId(UInt64 seq, bool ignore_delete, PageEntryV3 * entry);
 
     Int64 incrRefCount(const PageVersion & ver);
@@ -189,8 +189,8 @@ public:
      */
     PageSize getEntriesByBlobIds(
         const std::unordered_set<BlobFileId> & blob_ids,
-        typename Trait::PageID page_id,
-        typename Trait::EntriesByBlobID & blob_versioned_entries);
+        const typename Trait::PageId & page_id,
+        typename Trait::GcEntriesMap & blob_versioned_entries);
 
     /**
      * Given a `lowest_seq`, this will clean all outdated entries before `lowest_seq`.
@@ -212,13 +212,13 @@ public:
         bool keep_last_valid_var_entry = false);
     bool derefAndClean(
         UInt64 lowest_seq,
-        typename Trait::PageID page_id,
+        const typename Trait::PageId & page_id,
         const PageVersion & deref_ver,
         Int64 deref_count,
         PageEntriesV3 * entries_removed,
         bool keep_last_valid_var_entry = false);
 
-    void collapseTo(UInt64 seq, typename Trait::PageID page_id, typename Trait::PageEntriesEdit & edit);
+    void collapseTo(UInt64 seq, const typename Trait::PageId & page_id, typename Trait::PageEntriesEdit & edit);
 
     size_t size() const
     {
@@ -262,11 +262,11 @@ private:
     // The deleted version, valid when type == VAR_REF/VAR_EXTERNAL && is_deleted = true
     PageVersion delete_ver;
     // Original page id, valid when type == VAR_REF
-    typename Trait::PageID ori_page_id;
+    typename Trait::PageId ori_page_id;
     // Being ref counter, valid when type == VAR_EXTERNAL
     Int64 being_ref_count;
     // A shared ptr to a holder, valid when type == VAR_EXTERNAL
-    typename Trait::PageIDSharedPtr external_holder;
+    typename Trait::PageIdSharedPtr external_holder;
 };
 
 // `PageDirectory` store multi-versions entries for the same
@@ -286,29 +286,29 @@ public:
 
     SnapshotsStatistics getSnapshotsStat() const;
 
-    typename Trait::PageIDAndEntry getByID(typename Trait::PageID page_id, const DB::PageStorageSnapshotPtr & snap) const
+    typename Trait::PageIdAndEntry getByID(const typename Trait::PageId & page_id, const DB::PageStorageSnapshotPtr & snap) const
     {
         return getByIDImpl(page_id, toConcreteSnapshot(snap), /*throw_on_not_exist=*/true);
     }
-    typename Trait::PageIDAndEntry getByIDOrNull(typename Trait::PageID page_id, const DB::PageStorageSnapshotPtr & snap) const
+    typename Trait::PageIdAndEntry getByIDOrNull(const typename Trait::PageId & page_id, const DB::PageStorageSnapshotPtr & snap) const
     {
         return getByIDImpl(page_id, toConcreteSnapshot(snap), /*throw_on_not_exist=*/false);
     }
 
-    typename Trait::PageIDAndEntries getByIDs(const typename Trait::PageIDs & page_ids, const DB::PageStorageSnapshotPtr & snap) const
+    typename Trait::PageIdAndEntries getByIDs(const typename Trait::PageIds & page_ids, const DB::PageStorageSnapshotPtr & snap) const
     {
         return std::get<0>(getByIDsImpl(page_ids, toConcreteSnapshot(snap), /*throw_on_not_exist=*/true));
     }
-    typename Trait::PageIDAndEntriesWithError getByIDsOrNull(typename Trait::PageIDs page_ids, const DB::PageStorageSnapshotPtr & snap) const
+    typename Trait::PageIdAndEntriesWithError getByIDsOrNull(const typename Trait::PageIds & page_ids, const DB::PageStorageSnapshotPtr & snap) const
     {
         return getByIDsImpl(page_ids, toConcreteSnapshot(snap), /*throw_on_not_exist=*/false);
     }
 
-    typename Trait::PageID getNormalPageId(typename Trait::PageID page_id, const DB::PageStorageSnapshotPtr & snap, bool throw_on_not_exist) const;
+    typename Trait::PageId getNormalPageId(const typename Trait::PageId & page_id, const DB::PageStorageSnapshotPtr & snap, bool throw_on_not_exist) const;
 
     PageId getMaxId() const;
 
-    typename Trait::PageIDSet getAllPageIds();
+    typename Trait::PageIdSet getAllPageIds();
 
     void apply(typename Trait::PageEntriesEdit && edit, const WriteLimiterPtr & write_limiter = nullptr);
 
@@ -358,17 +358,17 @@ public:
     friend class PageStorageControlV3;
 
 private:
-    typename Trait::PageIDAndEntry
-    getByIDImpl(typename Trait::PageID page_id, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const;
-    typename Trait::PageIDAndEntriesWithError
-    getByIDsImpl(const typename Trait::PageIDs & page_ids, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const;
+    typename Trait::PageIdAndEntry
+    getByIDImpl(const typename Trait::PageId & page_id, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const;
+    typename Trait::PageIdAndEntriesWithError
+    getByIDsImpl(const typename Trait::PageIds & page_ids, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const;
 
 private:
     // Only `std::map` is allow for `MVCCMap`. Cause `std::map::insert` ensure that
     // "No iterators or references are invalidated"
     // https://en.cppreference.com/w/cpp/container/map/insert
     using VersionedPageEntriesPtr = std::shared_ptr<VersionedPageEntries<Trait>>;
-    using MVCCMapType = std::map<typename Trait::PageID, VersionedPageEntriesPtr>;
+    using MVCCMapType = std::map<typename Trait::PageId, VersionedPageEntriesPtr>;
 
     static void applyRefEditRecord(
         MVCCMapType & mvcc_table_directory,
@@ -402,28 +402,28 @@ namespace universal
 {
 struct PageDirectoryTrait
 {
-    using PageID = UniversalPageId;
-    using PageIDSharedPtr = std::shared_ptr<PageID>;
-    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageID>;
+    using PageId = UniversalPageId;
+    using PageIdSharedPtr = std::shared_ptr<PageId>;
+    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageId>;
     using EditRecord = PageEntriesEdit::EditRecord;
-    using EntriesByBlobID = std::map<BlobFileId, PageIdStringAndVersionedEntries>;
-    using EntriesDerefMap = std::map<PageID, std::pair<PageVersion, Int64>>;
 
-    using GcEntries = std::vector<std::tuple<PageID, PageVersion, PageEntryV3>>;
+    using EntriesDerefMap = std::map<PageId, std::pair<PageVersion, Int64>>;
+
+    using GcEntries = std::vector<std::tuple<PageId, PageVersion, PageEntryV3>>;
     using GcEntriesMap = std::map<BlobFileId, GcEntries>;
 
-    using PageIDSet = std::set<PageID>;
-    using PageIDs = std::vector<PageID>;
-    using PageIDAndEntry = std::pair<UniversalPageId, PageEntryV3>;
-    using PageIDAndEntries = std::vector<PageIDAndEntry>;
-    using PageIDAndEntriesWithError = std::pair<PageIDAndEntries, PageIDs>;
+    using PageIdSet = std::set<PageId>;
+    using PageIds = std::vector<PageId>;
+    using PageIdAndEntry = std::pair<UniversalPageId, PageEntryV3>;
+    using PageIdAndEntries = std::vector<PageIdAndEntry>;
+    using PageIdAndEntriesWithError = std::pair<PageIdAndEntries, PageIds>;
 
-    static inline PageID getInvalidID()
+    static inline PageId getInvalidID()
     {
         return "";
     }
 
-    static inline DB::PageId getU64ID(const PageID & page_id)
+    static inline DB::PageId getU64ID(const PageId & page_id)
     {
         UNUSED(page_id);
         // FIXME: we need to ignore some page_id with prefix
@@ -442,28 +442,28 @@ namespace u128
 {
 struct PageDirectoryTrait
 {
-    using PageID = PageIdV3Internal;
-    using PageIDSharedPtr = std::shared_ptr<PageID>;
-    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageID>;
+    using PageId = PageIdV3Internal;
+    using PageIdSharedPtr = std::shared_ptr<PageId>;
+    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageId>;
     using EditRecord = PageEntriesEdit::EditRecord;
-    using EntriesByBlobID = std::map<BlobFileId, PageIdInt128AndVersionedEntries>;
-    using EntriesDerefMap = std::map<PageID, std::pair<PageVersion, Int64>>;
 
-    using GcEntries = std::vector<std::tuple<PageID, PageVersion, PageEntryV3>>;
+    using EntriesDerefMap = std::map<PageId, std::pair<PageVersion, Int64>>;
+
+    using GcEntries = std::vector<std::tuple<PageId, PageVersion, PageEntryV3>>;
     using GcEntriesMap = std::map<BlobFileId, GcEntries>;
 
-    using PageIDSet = std::set<PageID>;
-    using PageIDs = std::vector<PageID>;
-    using PageIDAndEntry = PageIDAndEntryV3;
-    using PageIDAndEntries = PageIDAndEntriesV3;
-    using PageIDAndEntriesWithError = std::pair<PageIDAndEntries, PageIDs>;
+    using PageIdSet = std::set<PageId>;
+    using PageIds = std::vector<PageId>;
+    using PageIdAndEntry = PageIDAndEntryV3;
+    using PageIdAndEntries = PageIDAndEntriesV3;
+    using PageIdAndEntriesWithError = std::pair<PageIdAndEntries, PageIds>;
 
-    static inline PageID getInvalidID()
+    static inline PageId getInvalidID()
     {
         return buildV3Id(0, DB::INVALID_PAGE_ID);
     }
 
-    static inline DB::PageId getU64ID(PageID page_id)
+    static inline DB::PageId getU64ID(PageId page_id)
     {
         return page_id.low;
     }

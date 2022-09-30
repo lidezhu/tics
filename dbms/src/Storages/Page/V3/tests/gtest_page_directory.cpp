@@ -992,7 +992,7 @@ class PageDirectoryGCTest : public PageDirectoryTest
 #define INSERT_ENTRY_TO(PAGE_ID, VERSION, BLOB_FILE_ID)                                                                                          \
     PageEntryV3 entry_v##VERSION{.file_id = (BLOB_FILE_ID), .size = (VERSION), .padded_size = 0, .tag = 0, .offset = 0x123, .checksum = 0x4567}; \
     {                                                                                                                                            \
-        u128::PageEntriesEdit edit;                                                                                                                    \
+        u128::PageEntriesEdit edit;                                                                                                              \
         edit.put(buildV3Id(TEST_NAMESPACE_ID, (PAGE_ID)), entry_v##VERSION);                                                                     \
         dir->apply(std::move(edit));                                                                                                             \
     }
@@ -1004,7 +1004,7 @@ class PageDirectoryGCTest : public PageDirectoryTest
     auto snapshot##VERSION = dir->createSnapshot();
 #define INSERT_DELETE(PAGE_ID)                             \
     {                                                      \
-        u128::PageEntriesEdit edit;                              \
+        u128::PageEntriesEdit edit;                        \
         edit.del(buildV3Id(TEST_NAMESPACE_ID, (PAGE_ID))); \
         dir->apply(std::move(edit));                       \
     }

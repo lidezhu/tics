@@ -535,7 +535,7 @@ void BlobStore<Trait>::removePosFromStats(BlobFileId blob_id, BlobFileOffset off
 }
 
 template <typename Trait>
-void BlobStore<Trait>::read(typename Trait::PageIDAndEntries & entries, const typename Trait::PageHandler & handler, const ReadLimiterPtr & read_limiter)
+void BlobStore<Trait>::read(typename Trait::PageIdAndEntries & entries, const typename Trait::PageHandler & handler, const ReadLimiterPtr & read_limiter)
 {
     if (entries.empty())
     {
@@ -706,7 +706,7 @@ typename Trait::PageMap BlobStore<Trait>::read(typename Trait::FieldReadInfos & 
 }
 
 template <typename Trait>
-typename Trait::PageMap BlobStore<Trait>::read(typename Trait::PageIDAndEntries & entries, const ReadLimiterPtr & read_limiter)
+typename Trait::PageMap BlobStore<Trait>::read(typename Trait::PageIdAndEntries & entries, const ReadLimiterPtr & read_limiter)
 {
     if (entries.empty())
     {
@@ -789,7 +789,7 @@ typename Trait::PageMap BlobStore<Trait>::read(typename Trait::PageIDAndEntries 
 }
 
 template <typename Trait>
-typename Trait::Page BlobStore<Trait>::read(const typename Trait::PageIDAndEntry & id_entry, const ReadLimiterPtr & read_limiter)
+typename Trait::Page BlobStore<Trait>::read(const typename Trait::PageIdAndEntry & id_entry, const ReadLimiterPtr & read_limiter)
 {
     if (!id_entry.second.isValid())
     {
@@ -842,7 +842,7 @@ typename Trait::Page BlobStore<Trait>::read(const typename Trait::PageIDAndEntry
 
 template <typename Trait>
 BlobFilePtr BlobStore<Trait>::read(
-    const typename Trait::PageID & page_id_v3,
+    const typename Trait::PageId & page_id_v3,
     BlobFileId blob_id,
     BlobFileOffset offset,
     char * buffers,
@@ -1069,7 +1069,7 @@ BlobStore<Trait>::gc(typename Trait::GcEntriesMap & entries_need_gc,
                      const ReadLimiterPtr & read_limiter)
 {
     std::vector<std::tuple<BlobFileId, BlobFileOffset, PageSize>> written_blobs;
-    PageEntriesEdit<typename Trait::PageID> edit;
+    PageEntriesEdit<typename Trait::PageId> edit;
 
     if (total_page_size == 0)
     {

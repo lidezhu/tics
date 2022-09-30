@@ -1000,13 +1000,12 @@ TEST_F(BlobStoreTest, GC)
     u128::PageEntriesEdit edit = blob_store.write(wb, nullptr);
     ASSERT_EQ(edit.size(), buff_nums);
 
-    PageIdInt128AndVersionedEntries versioned_pageid_entries;
+    u128::PageDirectoryTrait::GcEntries versioned_pageid_entries;
     for (const auto & record : edit.getRecords())
     {
         versioned_pageid_entries.emplace_back(buildV3Id(TEST_NAMESPACE_ID, page_id), 1, record.entry);
     }
-    std::map<BlobFileId, PageIdInt128AndVersionedEntries> gc_context;
-    gc_context[1] = versioned_pageid_entries;
+    u128::PageDirectoryTrait::GcEntriesMap gc_context{{1, versioned_pageid_entries}};
 
     // Before we do BlobStore we need change BlobFile0 to Read-Only
     auto stat = blob_store.blob_stats.blobIdToStat(1);
@@ -1053,7 +1052,7 @@ try
 
     WriteBatch wb;
 
-    std::map<BlobFileId, PageIdInt128AndVersionedEntries> gc_context;
+    u128::PageDirectoryTrait::GcEntriesMap gc_context;
 
     for (size_t i = 0; i < buff_nums; ++i)
     {
@@ -1070,7 +1069,7 @@ try
         ASSERT_EQ(records.size(), 1);
         if (gc_context.find(records[0].entry.file_id) == gc_context.end())
         {
-            PageIdInt128AndVersionedEntries versioned_pageid_entries;
+            u128::PageDirectoryTrait::GcEntries versioned_pageid_entries;
             versioned_pageid_entries.emplace_back(page_id, 1, records[0].entry);
             gc_context[records[0].entry.file_id] = std::move(versioned_pageid_entries);
         }
@@ -1501,10 +1500,8 @@ try
 
         const auto & blob_need_gc2 = blob_store.getGCStats();
         ASSERT_EQ(blob_need_gc2.size(), 1);
-        std::map<BlobFileId, PageIdInt128AndVersionedEntries> gc_context;
-        PageIdInt128AndVersionedEntries versioned_pageid_entries;
-        versioned_pageid_entries.emplace_back(page_id2, 1, entry_from_write2);
-        gc_context[1] = versioned_pageid_entries;
+        u128::PageDirectoryTrait::GcEntries gc_entries{{buildV3Id(TEST_NAMESPACE_ID, page_id2), PageVersion(1), entry_from_write2}};
+        u128::PageDirectoryTrait::GcEntriesMap gc_context{{1, gc_entries}};
         u128::PageEntriesEdit gc_edit = blob_store.gc(gc_context, 500);
         const auto & records = gc_edit.getRecords();
         ASSERT_EQ(records.size(), 1);
