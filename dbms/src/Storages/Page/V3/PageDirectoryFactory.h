@@ -77,7 +77,7 @@ namespace universal
 struct FactoryTrait
 {
     using PageDirectoryPtr = PageDirectoryPtr;
-    using PageDirectoryType = PageDirectory<PageDirectoryStringTrait>;
+    using PageDirectoryType = PageDirectory<PageDirectoryTrait>;
     using PageEntriesEdit = PageEntriesEdit;
 };
 using PageDirectoryFactory = DB::PS::V3::PageDirectoryFactory<FactoryTrait>;
@@ -88,7 +88,7 @@ namespace u128
 struct FactoryTrait
 {
     using PageDirectoryPtr = PageDirectoryPtr;
-    using PageDirectoryType = PageDirectory<PageDirectoryInt128Trait>;
+    using PageDirectoryType = PageDirectory<PageDirectoryTrait>;
     using PageEntriesEdit = PageEntriesEdit;
 };
 using PageDirectoryFactory = DB::PS::V3::PageDirectoryFactory<FactoryTrait>;

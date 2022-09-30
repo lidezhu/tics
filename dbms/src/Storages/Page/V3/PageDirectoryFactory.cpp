@@ -140,7 +140,7 @@ void PageDirectoryFactory<Trait>::applyRecord(
     auto [iter, created] = dir->mvcc_table_directory.insert(std::make_pair(r.page_id, nullptr));
     if (created)
     {
-        iter->second = std::make_shared<VersionedPageEntries<PageDirectoryInt128Trait>>();
+        iter->second = std::make_shared<VersionedPageEntries<u128::PageDirectoryTrait>>();
     }
 
     dir->max_page_id = std::max(dir->max_page_id, r.page_id.low);

@@ -746,7 +746,7 @@ void VersionedPageEntries<Trait>::collapseTo(const UInt64 seq, const typename Tr
     throw Exception(fmt::format("Calling collapseTo with invalid state [state={}]", toDebugString()));
 }
 
-template class VersionedPageEntries<PageDirectoryInt128Trait>;
+template class VersionedPageEntries<u128::PageDirectoryTrait>;
 
 /**************************
   * PageDirectory methods *
@@ -1533,7 +1533,7 @@ typename Trait::PageEntriesEdit PageDirectory<Trait>::dumpSnapshotToEdit(PageDir
     return edit;
 }
 
-template class PageDirectory<PageDirectoryInt128Trait>;
+template class PageDirectory<u128::PageDirectoryTrait>;
 // template class PageDirectory<PageDirectoryStringTrait>;
 
 } // namespace PS::V3
