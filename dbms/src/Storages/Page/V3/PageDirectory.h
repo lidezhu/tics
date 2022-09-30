@@ -44,75 +44,6 @@ extern const Metric PSMVCCNumSnapshots;
 
 namespace DB::PS::V3
 {
-struct PageDirectoryInt128Trait
-{
-    using PageID = PageIdV3Internal;
-    using PageIDSharedPtr = std::shared_ptr<PageID>;
-    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageID>;
-    using EditRecord = PageEntriesEdit::EditRecord;
-    using EntriesByBlobID = std::map<BlobFileId, PageIdInt128AndVersionedEntries>;
-    using EntriesDerefMap = std::map<PageID, std::pair<PageVersion, Int64>>;
-
-    using GcEntries = std::vector<std::tuple<PageID, PageVersion, PageEntryV3>>;
-    using GcEntriesMap = std::map<BlobFileId, GcEntries>;
-
-    using PageIDSet = std::set<PageID>;
-    using PageIDs = std::vector<PageID>;
-    using PageIDAndEntry = PageIDAndEntryV3;
-    using PageIDAndEntries = PageIDAndEntriesV3;
-    using PageIDAndEntriesWithError = std::pair<PageIDAndEntries, PageIDs>;
-
-    static inline PageID getInvalidID()
-    {
-        return buildV3Id(0, DB::INVALID_PAGE_ID);
-    }
-
-    static inline DB::PageId getU64ID(PageID page_id)
-    {
-        return page_id.low;
-    }
-
-    static inline String serializeTo(const PageEntriesEdit & edit)
-    {
-        return ::DB::PS::V3::u128::ser::serializeTo(edit);
-    }
-};
-
-struct PageDirectoryStringTrait
-{
-    using PageID = UniversalPageId;
-    using PageIDSharedPtr = std::shared_ptr<PageID>;
-    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageID>;
-    using EditRecord = PageEntriesEdit::EditRecord;
-    using EntriesByBlobID = std::map<BlobFileId, PageIdStringAndVersionedEntries>;
-    using EntriesDerefMap = std::map<PageID, std::pair<PageVersion, Int64>>;
-
-    using GcEntries = std::vector<std::tuple<PageID, PageVersion, PageEntryV3>>;
-    using GcEntriesMap = std::map<BlobFileId, GcEntries>;
-
-    using PageIDSet = std::set<PageID>;
-    using PageIDs = std::vector<PageID>;
-    using PageIDAndEntry = std::pair<UniversalPageId, PageEntryV3>;
-    using PageIDAndEntries = std::vector<PageIDAndEntry>;
-    using PageIDAndEntriesWithError = std::pair<PageIDAndEntries, PageIDs>;
-
-    static inline PageID getInvalidID()
-    {
-        return "";
-    }
-
-    static inline DB::PageId getU64ID(const PageID & page_id)
-    {
-        UNUSED(page_id);
-        // FIXME: we need to ignore some page_id with prefix
-        return 0;
-    }
-
-    static inline String serializeTo(const PageEntriesEdit & edit)
-    {
-        return ::DB::PS::V3::universal::ser::serializeTo(edit);
-    }
-};
 
 class PageDirectorySnapshot : public DB::PageStorageSnapshot
 {
@@ -469,12 +400,81 @@ private:
 
 namespace universal
 {
-using PageDirectoryPtr = std::unique_ptr<PageDirectory<PageDirectoryStringTrait>>;
-}
+struct PageDirectoryTrait
+{
+    using PageID = UniversalPageId;
+    using PageIDSharedPtr = std::shared_ptr<PageID>;
+    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageID>;
+    using EditRecord = PageEntriesEdit::EditRecord;
+    using EntriesByBlobID = std::map<BlobFileId, PageIdStringAndVersionedEntries>;
+    using EntriesDerefMap = std::map<PageID, std::pair<PageVersion, Int64>>;
+
+    using GcEntries = std::vector<std::tuple<PageID, PageVersion, PageEntryV3>>;
+    using GcEntriesMap = std::map<BlobFileId, GcEntries>;
+
+    using PageIDSet = std::set<PageID>;
+    using PageIDs = std::vector<PageID>;
+    using PageIDAndEntry = std::pair<UniversalPageId, PageEntryV3>;
+    using PageIDAndEntries = std::vector<PageIDAndEntry>;
+    using PageIDAndEntriesWithError = std::pair<PageIDAndEntries, PageIDs>;
+
+    static inline PageID getInvalidID()
+    {
+        return "";
+    }
+
+    static inline DB::PageId getU64ID(const PageID & page_id)
+    {
+        UNUSED(page_id);
+        // FIXME: we need to ignore some page_id with prefix
+        return 0;
+    }
+
+    static inline String serializeTo(const PageEntriesEdit & edit)
+    {
+        return ::DB::PS::V3::universal::ser::serializeTo(edit);
+    }
+};
+
+using PageDirectoryPtr = std::unique_ptr<PageDirectory<PageDirectoryTrait>>;
+} // namespace universal
 namespace u128
 {
-using PageDirectoryPtr = std::unique_ptr<PageDirectory<PageDirectoryInt128Trait>>;
-using VersionedPageEntries = DB::PS::V3::VersionedPageEntries<PageDirectoryInt128Trait>;
+struct PageDirectoryTrait
+{
+    using PageID = PageIdV3Internal;
+    using PageIDSharedPtr = std::shared_ptr<PageID>;
+    using PageEntriesEdit = DB::PS::V3::PageEntriesEdit<PageID>;
+    using EditRecord = PageEntriesEdit::EditRecord;
+    using EntriesByBlobID = std::map<BlobFileId, PageIdInt128AndVersionedEntries>;
+    using EntriesDerefMap = std::map<PageID, std::pair<PageVersion, Int64>>;
+
+    using GcEntries = std::vector<std::tuple<PageID, PageVersion, PageEntryV3>>;
+    using GcEntriesMap = std::map<BlobFileId, GcEntries>;
+
+    using PageIDSet = std::set<PageID>;
+    using PageIDs = std::vector<PageID>;
+    using PageIDAndEntry = PageIDAndEntryV3;
+    using PageIDAndEntries = PageIDAndEntriesV3;
+    using PageIDAndEntriesWithError = std::pair<PageIDAndEntries, PageIDs>;
+
+    static inline PageID getInvalidID()
+    {
+        return buildV3Id(0, DB::INVALID_PAGE_ID);
+    }
+
+    static inline DB::PageId getU64ID(PageID page_id)
+    {
+        return page_id.low;
+    }
+
+    static inline String serializeTo(const PageEntriesEdit & edit)
+    {
+        return ::DB::PS::V3::u128::ser::serializeTo(edit);
+    }
+};
+using PageDirectoryPtr = std::unique_ptr<PageDirectory<PageDirectoryTrait>>;
+using VersionedPageEntries = DB::PS::V3::VersionedPageEntries<PageDirectoryTrait>;
 using VersionedPageEntriesPtr = std::shared_ptr<VersionedPageEntries>;
 } // namespace u128
 
