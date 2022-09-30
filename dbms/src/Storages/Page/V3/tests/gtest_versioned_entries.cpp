@@ -529,7 +529,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
     INSERT_BLOBID_ENTRY(1, 11);
 
     PageId page_id = 100;
-    auto check_for_blob_id_1 = [&](const PageIdInt128AndVersionedEntries & entries) {
+    auto check_for_blob_id_1 = [&](const u128::PageDirectoryTrait::GcEntries & entries) {
         auto it = entries.begin();
 
         ASSERT_EQ(std::get<0>(*it).low, page_id);
@@ -551,7 +551,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
         ASSERT_EQ(std::get<1>(*it).sequence, 11);
         ASSERT_SAME_ENTRY(std::get<2>(*it), entry_v11);
     };
-    auto check_for_blob_id_2 = [&](const PageIdInt128AndVersionedEntries & entries) {
+    auto check_for_blob_id_2 = [&](const u128::PageDirectoryTrait::GcEntries & entries) {
         auto it = entries.begin();
 
         ASSERT_EQ(std::get<0>(*it).low, page_id);
@@ -563,7 +563,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
         ASSERT_EQ(std::get<1>(*it).sequence, 4);
         ASSERT_SAME_ENTRY(std::get<2>(*it), entry_v4);
     };
-    auto check_for_blob_id_3 = [&](const PageIdInt128AndVersionedEntries & entries) {
+    auto check_for_blob_id_3 = [&](const u128::PageDirectoryTrait::GcEntries & entries) {
         auto it = entries.begin();
 
         ASSERT_EQ(std::get<0>(*it).low, page_id);
@@ -577,7 +577,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
     };
 
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         PageSize total_size = entries.getEntriesByBlobIds({/*empty*/}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
         ASSERT_EQ(blob_entries.size(), 0);
@@ -585,7 +585,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
     }
 
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         const BlobFileId blob_id = 1;
         PageSize total_size = entries.getEntriesByBlobIds({blob_id}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
@@ -596,7 +596,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
     }
 
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         const BlobFileId blob_id = 2;
         PageSize total_size = entries.getEntriesByBlobIds({blob_id}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
@@ -607,7 +607,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
     }
 
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         const BlobFileId blob_id = 3;
         PageSize total_size = entries.getEntriesByBlobIds({blob_id}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
@@ -619,7 +619,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
 
     // {1, 2}
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         PageSize total_size = entries.getEntriesByBlobIds({1, 2}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
         ASSERT_EQ(blob_entries.size(), 2);
@@ -632,7 +632,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
 
     // {2, 3}
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         PageSize total_size = entries.getEntriesByBlobIds({3, 2}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
         ASSERT_EQ(blob_entries.size(), 2);
@@ -645,7 +645,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
 
     // {1, 2, 3}
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         PageSize total_size = entries.getEntriesByBlobIds({1, 3, 2}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
         ASSERT_EQ(blob_entries.size(), 3);
@@ -660,7 +660,7 @@ TEST_F(VersionedEntriesTest, getEntriesByBlobId)
 
     // {1, 2, 3, 100}; blob_id 100 is not exist in actual
     {
-        u128::PageDirectoryTrait::EntriesByBlobID blob_entries;
+        u128::PageDirectoryTrait::GcEntriesMap blob_entries;
         PageSize total_size = entries.getEntriesByBlobIds({1, 3, 2, 4}, buildV3Id(TEST_NAMESPACE_ID, page_id), blob_entries);
 
         ASSERT_EQ(blob_entries.size(), 3); // 100 not exist

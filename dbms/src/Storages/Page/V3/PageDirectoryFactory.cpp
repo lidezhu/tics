@@ -218,7 +218,7 @@ void PageDirectoryFactory<Trait>::loadFromDisk(const typename Trait::PageDirecto
         }
 
         // apply the edit read
-        auto edit = ser::deserializeFrom(record.value());
+        auto edit = u128::ser::deserializeFrom(record.value());
         loadEdit(dir, edit);
     }
 }

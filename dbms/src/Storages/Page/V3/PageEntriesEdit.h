@@ -112,11 +112,11 @@ inline const char * typeToString(EditRecordType t)
 }
 
 /// Page entries change to apply to PageDirectory
-template <typename PageIDType>
+template <typename PageIdType>
 class PageEntriesEdit
 {
 public:
-    using PageID = PageIDType;
+    using PageId = PageIdType;
 
 public:
     PageEntriesEdit() = default;
@@ -126,7 +126,7 @@ public:
         records.reserve(capacity);
     }
 
-    void put(const PageIDType & page_id, const PageEntryV3 & entry)
+    void put(const PageId & page_id, const PageEntryV3 & entry)
     {
         EditRecord record{};
         record.type = EditRecordType::PUT;
@@ -135,7 +135,7 @@ public:
         records.emplace_back(record);
     }
 
-    void putExternal(const PageIDType & page_id)
+    void putExternal(const PageId & page_id)
     {
         EditRecord record{};
         record.type = EditRecordType::PUT_EXTERNAL;
@@ -143,7 +143,7 @@ public:
         records.emplace_back(record);
     }
 
-    void upsertPage(const PageIDType & page_id, const PageVersion & ver, const PageEntryV3 & entry)
+    void upsertPage(const PageId & page_id, const PageVersion & ver, const PageEntryV3 & entry)
     {
         EditRecord record{};
         record.type = EditRecordType::UPSERT;
@@ -153,7 +153,7 @@ public:
         records.emplace_back(record);
     }
 
-    void del(const PageIDType & page_id)
+    void del(const PageId & page_id)
     {
         EditRecord record{};
         record.type = EditRecordType::DEL;
@@ -161,7 +161,7 @@ public:
         records.emplace_back(record);
     }
 
-    void ref(const PageIDType & ref_id, const PageIDType & page_id)
+    void ref(const PageId & ref_id, const PageId & page_id)
     {
         EditRecord record{};
         record.type = EditRecordType::REF;
@@ -170,7 +170,7 @@ public:
         records.emplace_back(record);
     }
 
-    void varRef(const PageIDType & ref_id, const PageVersion & ver, PageIDType ori_page_id)
+    void varRef(const PageId & ref_id, const PageVersion & ver, const PageId & ori_page_id)
     {
         EditRecord record{};
         record.type = EditRecordType::VAR_REF;
@@ -180,7 +180,7 @@ public:
         records.emplace_back(record);
     }
 
-    void varExternal(const PageIDType & page_id, const PageVersion & create_ver, Int64 being_ref_count)
+    void varExternal(const PageId & page_id, const PageVersion & create_ver, Int64 being_ref_count)
     {
         EditRecord record{};
         record.type = EditRecordType::VAR_EXTERNAL;
@@ -190,7 +190,7 @@ public:
         records.emplace_back(record);
     }
 
-    void varEntry(const PageIDType & page_id, const PageVersion & ver, const PageEntryV3 & entry, Int64 being_ref_count)
+    void varEntry(const PageId & page_id, const PageVersion & ver, const PageEntryV3 & entry, Int64 being_ref_count)
     {
         EditRecord record{};
         record.type = EditRecordType::VAR_ENTRY;
@@ -201,7 +201,7 @@ public:
         records.emplace_back(record);
     }
 
-    void varDel(const PageIDType & page_id, const PageVersion & delete_ver)
+    void varDel(const PageId & page_id, const PageVersion & delete_ver)
     {
         EditRecord record{};
         record.type = EditRecordType::VAR_DELETE;
@@ -218,20 +218,12 @@ public:
 
     struct EditRecord
     {
-        EditRecordType type;
-        PageIDType page_id;
-        PageIDType ori_page_id;
+        EditRecordType type{EditRecordType::DEL};
+        PageId page_id{};
+        PageId ori_page_id{};
         PageVersion version;
         PageEntryV3 entry;
-        Int64 being_ref_count;
-
-        EditRecord()
-            : type(EditRecordType::DEL)
-            , page_id(0)
-            , ori_page_id(0)
-            , version(0, 0)
-            , being_ref_count(1)
-        {}
+        Int64 being_ref_count{1};
     };
     using EditRecords = std::vector<EditRecord>;
 
@@ -285,8 +277,6 @@ namespace universal
 using PageEntriesEdit = PageEntriesEdit<UniversalPageId>;
 }
 
-using PageIdInt128AndVersionedEntries = std::vector<std::tuple<PageIdV3Internal, PageVersion, PageEntryV3>>;
-using PageIdStringAndVersionedEntries = std::vector<std::tuple<UniversalPageId, PageVersion, PageEntryV3>>;
 
 } // namespace DB::PS::V3
 

@@ -67,11 +67,11 @@ public:
 
     void remove(const PageEntriesV3 & del_entries);
 
-    typename Trait::PageMap read(typename Trait::PageIDAndEntries & entries, const ReadLimiterPtr & read_limiter = nullptr);
+    typename Trait::PageMap read(typename Trait::PageIdAndEntries & entries, const ReadLimiterPtr & read_limiter = nullptr);
 
-    typename Trait::Page read(const typename Trait::PageIDAndEntry & entry, const ReadLimiterPtr & read_limiter = nullptr);
+    typename Trait::Page read(const typename Trait::PageIdAndEntry & entry, const ReadLimiterPtr & read_limiter = nullptr);
 
-    void read(typename Trait::PageIDAndEntries & entries, const typename Trait::PageHandler & handler, const ReadLimiterPtr & read_limiter = nullptr);
+    void read(typename Trait::PageIdAndEntries & entries, const typename Trait::PageHandler & handler, const ReadLimiterPtr & read_limiter = nullptr);
 
     typename Trait::PageMap read(typename Trait::FieldReadInfos & to_read, const ReadLimiterPtr & read_limiter = nullptr);
 
@@ -83,7 +83,7 @@ private:
     handleLargeWrite(DB::WriteBatch & wb, const WriteLimiterPtr & write_limiter = nullptr);
 
     BlobFilePtr read(
-        const typename Trait::PageID & page_id_v3,
+        const typename Trait::PageId & page_id_v3,
         BlobFileId blob_id,
         BlobFileOffset offset,
         char * buffers,
@@ -132,23 +132,23 @@ namespace u128
 {
 struct BlobStoreTrait
 {
-    using PageID = PageIdV3Internal;
+    using PageId = PageIdV3Internal;
     using PageEntriesEditType = PageEntriesEdit;
-    using GcEntries = std::vector<std::tuple<PageID, PageVersion, PageEntryV3>>;
+    using GcEntries = std::vector<std::tuple<PageId, PageVersion, PageEntryV3>>;
     using GcEntriesMap = std::map<BlobFileId, GcEntries>;
-    using PageIDAndEntry = PageIDAndEntryV3;
-    using PageIDAndEntries = PageIDAndEntriesV3;
+    using PageIdAndEntry = PageIDAndEntryV3;
+    using PageIdAndEntries = PageIDAndEntriesV3;
     using Page = Page;
     using PageMap = PageMap;
     using PageHandler = PageHandler;
 
     struct FieldReadInfo
     {
-        PageID page_id;
+        PageId page_id;
         PageEntryV3 entry;
         std::vector<size_t> fields;
 
-        FieldReadInfo(const PageID & id_, PageEntryV3 entry_, std::vector<size_t> fields_)
+        FieldReadInfo(const PageId & id_, PageEntryV3 entry_, std::vector<size_t> fields_)
             : page_id(id_)
             , entry(entry_)
             , fields(std::move(fields_))
