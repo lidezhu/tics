@@ -122,7 +122,7 @@ void VersionedPageEntries<Trait>::createNewEntry(const PageVersion & ver, const 
 // If create success, then return a shared_ptr as a holder for page_id. The holder
 // will be release when this external version is totally removed.
 template <typename Trait>
-typename Trait::PageIDSharedPtr VersionedPageEntries<Trait>::createNewExternal(const PageVersion & ver)
+typename Trait::PageIdSharedPtr VersionedPageEntries<Trait>::createNewExternal(const PageVersion & ver)
 {
     auto page_lock = acquireLock();
     if (type == EditRecordType::VAR_DELETE)
@@ -133,7 +133,7 @@ typename Trait::PageIDSharedPtr VersionedPageEntries<Trait>::createNewExternal(c
         delete_ver = PageVersion(0);
         being_ref_count = 1;
         // return the new created holder to caller to set the page_id
-        external_holder = std::make_shared<typename Trait::PageID>(0, 0);
+        external_holder = std::make_shared<typename Trait::PageId>(0, 0);
         return external_holder;
     }
 
@@ -149,7 +149,7 @@ typename Trait::PageIDSharedPtr VersionedPageEntries<Trait>::createNewExternal(c
                 delete_ver = PageVersion(0);
                 being_ref_count = 1;
                 // return the new created holder to caller to set the page_id
-                external_holder = std::make_shared<typename Trait::PageID>(0, 0);
+                external_holder = std::make_shared<typename Trait::PageId>(0, 0);
                 return external_holder;
             }
             else
@@ -212,7 +212,7 @@ void VersionedPageEntries<Trait>::createDelete(const PageVersion & ver)
 // Create a new reference version with version=`ver` and `ori_page_id_`.
 // If create success, then return true, otherwise return false.
 template <typename Trait>
-bool VersionedPageEntries<Trait>::createNewRef(const PageVersion & ver, typename Trait::PageID ori_page_id_)
+bool VersionedPageEntries<Trait>::createNewRef(const PageVersion & ver, const typename Trait::PageId & ori_page_id_)
 {
     auto page_lock = acquireLock();
     if (type == EditRecordType::VAR_DELETE)
@@ -266,7 +266,7 @@ bool VersionedPageEntries<Trait>::createNewRef(const PageVersion & ver, typename
 }
 
 template <typename Trait>
-typename Trait::PageIDSharedPtr VersionedPageEntries<Trait>::fromRestored(const typename Trait::EditRecord & rec)
+typename Trait::PageIdSharedPtr VersionedPageEntries<Trait>::fromRestored(const typename Trait::EditRecord & rec)
 {
     auto page_lock = acquireLock();
     if (rec.type == EditRecordType::VAR_REF)
@@ -283,7 +283,7 @@ typename Trait::PageIDSharedPtr VersionedPageEntries<Trait>::fromRestored(const 
         is_deleted = false;
         create_ver = rec.version;
         being_ref_count = rec.being_ref_count;
-        external_holder = std::make_shared<typename Trait::PageID>(rec.page_id);
+        external_holder = std::make_shared<typename Trait::PageId>(rec.page_id);
         return external_holder;
     }
     else if (rec.type == EditRecordType::VAR_ENTRY)
@@ -299,7 +299,7 @@ typename Trait::PageIDSharedPtr VersionedPageEntries<Trait>::fromRestored(const 
 }
 
 template <typename Trait>
-std::tuple<ResolveResult, typename Trait::PageID, PageVersion>
+std::tuple<ResolveResult, typename Trait::PageId, PageVersion>
 VersionedPageEntries<Trait>::resolveToPageId(UInt64 seq, bool ignore_delete, PageEntryV3 * entry)
 {
     auto page_lock = acquireLock();
@@ -473,8 +473,8 @@ Int64 VersionedPageEntries<Trait>::incrRefCount(const PageVersion & ver)
 template <typename Trait>
 PageSize VersionedPageEntries<Trait>::getEntriesByBlobIds(
     const std::unordered_set<BlobFileId> & blob_ids,
-    typename Trait::PageID page_id,
-    typename Trait::EntriesByBlobID & blob_versioned_entries)
+    const typename Trait::PageId & page_id,
+    typename Trait::GcEntriesMap & blob_versioned_entries)
 {
     // blob_file_0, [<page_id_0, ver0, entry0>,
     //               <page_id_0, ver1, entry1>,
@@ -552,7 +552,7 @@ bool VersionedPageEntries<Trait>::cleanOutdatedEntries(
     auto iter = MapUtils::findLess(entries, PageVersion(lowest_seq + 1));
     // If we can't find any seq lower than `lowest_seq` then
     // all version in this list don't need gc.
-    if (iter == entries.begin() || iter == entries.end())
+    if (iter == entries.begin() || iter == entries.end()) // NOLINT(misc-redundant-expression)
     {
         return false;
     }
@@ -612,7 +612,7 @@ bool VersionedPageEntries<Trait>::cleanOutdatedEntries(
 template <typename Trait>
 bool VersionedPageEntries<Trait>::derefAndClean(
     UInt64 lowest_seq,
-    typename Trait::PageID page_id,
+    const typename Trait::PageId & page_id,
     const PageVersion & deref_ver,
     const Int64 deref_count,
     PageEntriesV3 * entries_removed,
@@ -664,7 +664,7 @@ bool VersionedPageEntries<Trait>::derefAndClean(
 }
 
 template <typename Trait>
-void VersionedPageEntries<Trait>::collapseTo(const UInt64 seq, const typename Trait::PageID page_id, typename Trait::PageEntriesEdit & edit)
+void VersionedPageEntries<Trait>::collapseTo(const UInt64 seq, const typename Trait::PageId & page_id, typename Trait::PageEntriesEdit & edit)
 {
     auto page_lock = acquireLock();
     if (type == EditRecordType::VAR_REF)
@@ -817,8 +817,8 @@ SnapshotsStatistics PageDirectory<Trait>::getSnapshotsStat() const
 }
 
 template <typename Trait>
-typename Trait::PageIDAndEntry
-PageDirectory<Trait>::getByIDImpl(typename Trait::PageID page_id, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const
+typename Trait::PageIdAndEntry
+PageDirectory<Trait>::getByIDImpl(const typename Trait::PageId & page_id, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const
 {
     PageEntryV3 entry_got;
 
@@ -850,7 +850,7 @@ PageDirectory<Trait>::getByIDImpl(typename Trait::PageID page_id, const PageDire
     // resolve ref id 11 to 10 with seq=2, and continue to ignore all "delete"s in the version chain in
     // page 10 until we find the "entryX".
 
-    typename Trait::PageID id_to_resolve = page_id;
+    typename Trait::PageId id_to_resolve = page_id;
     PageVersion ver_to_resolve(snap->sequence, 0);
     bool ok = true;
     while (ok)
@@ -872,7 +872,7 @@ PageDirectory<Trait>::getByIDImpl(typename Trait::PageID page_id, const PageDire
                 }
                 else
                 {
-                    return typename Trait::PageIDAndEntry{page_id, PageEntryV3{.file_id = INVALID_BLOBFILE_ID}};
+                    return typename Trait::PageIdAndEntry{page_id, PageEntryV3{.file_id = INVALID_BLOBFILE_ID}};
                 }
             }
         }
@@ -880,7 +880,7 @@ PageDirectory<Trait>::getByIDImpl(typename Trait::PageID page_id, const PageDire
         switch (resolve_state)
         {
         case ResolveResult::TO_NORMAL:
-            return typename Trait::PageIDAndEntry{page_id, entry_got};
+            return typename Trait::PageIdAndEntry{page_id, entry_got};
         case ResolveResult::FAIL:
             ok = false;
             break;
@@ -905,20 +905,20 @@ PageDirectory<Trait>::getByIDImpl(typename Trait::PageID page_id, const PageDire
     }
     else
     {
-        return typename Trait::PageIDAndEntry{page_id, PageEntryV3{.file_id = INVALID_BLOBFILE_ID}};
+        return typename Trait::PageIdAndEntry{page_id, PageEntryV3{.file_id = INVALID_BLOBFILE_ID}};
     }
 }
 
 template <typename Trait>
-typename Trait::PageIDAndEntriesWithError
-PageDirectory<Trait>::getByIDsImpl(const typename Trait::PageIDs & page_ids, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const
+typename Trait::PageIdAndEntriesWithError
+PageDirectory<Trait>::getByIDsImpl(const typename Trait::PageIds & page_ids, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const
 {
     PageEntryV3 entry_got;
-    typename Trait::PageIDs page_not_found = {};
+    typename Trait::PageIds page_not_found = {};
 
     const PageVersion init_ver_to_resolve(snap->sequence, 0);
-    auto get_one = [&entry_got, init_ver_to_resolve, throw_on_not_exist, this](typename Trait::PageID page_id, PageVersion ver_to_resolve, size_t idx) {
-        typename Trait::PageID id_to_resolve = page_id;
+    auto get_one = [&entry_got, init_ver_to_resolve, throw_on_not_exist, this](const typename Trait::PageId & page_id, PageVersion ver_to_resolve, size_t idx) {
+        typename Trait::PageId id_to_resolve = page_id;
         bool ok = true;
         while (ok)
         {
@@ -968,7 +968,7 @@ PageDirectory<Trait>::getByIDsImpl(const typename Trait::PageIDs & page_ids, con
         }
     };
 
-    typename Trait::PageIDAndEntries id_entries;
+    typename Trait::PageIdAndEntries id_entries;
     for (size_t idx = 0; idx < page_ids.size(); ++idx)
     {
         if (auto ok = get_one(page_ids[idx], init_ver_to_resolve, idx); ok)
@@ -985,10 +985,10 @@ PageDirectory<Trait>::getByIDsImpl(const typename Trait::PageIDs & page_ids, con
 }
 
 template <typename Trait>
-typename Trait::PageID PageDirectory<Trait>::getNormalPageId(typename Trait::PageID page_id, const DB::PageStorageSnapshotPtr & snap_, bool throw_on_not_exist) const
+typename Trait::PageId PageDirectory<Trait>::getNormalPageId(const typename Trait::PageId & page_id, const DB::PageStorageSnapshotPtr & snap_, bool throw_on_not_exist) const
 {
     auto snap = toConcreteSnapshot(snap_);
-    typename Trait::PageID id_to_resolve = page_id;
+    typename Trait::PageId id_to_resolve = page_id;
     PageVersion ver_to_resolve(snap->sequence, 0);
     bool keep_resolve = true;
     while (keep_resolve)
@@ -1054,9 +1054,9 @@ PageId PageDirectory<Trait>::getMaxId() const
 }
 
 template <typename Trait>
-typename Trait::PageIDSet PageDirectory<Trait>::getAllPageIds()
+typename Trait::PageIdSet PageDirectory<Trait>::getAllPageIds()
 {
-    typename Trait::PageIDSet page_ids;
+    typename Trait::PageIdSet page_ids;
     std::shared_lock read_lock(table_rw_mutex);
 
     for (auto & [page_id, versioned] : mvcc_table_directory)
@@ -1105,8 +1105,8 @@ void PageDirectory<Trait>::applyRefEditRecord(
     // non-collapse ref chain is much harder and long ref chain make the time of accessing an entry
     // not stable.
 
-    auto [resolve_success, resolved_id, resolved_ver] = [&mvcc_table_directory, ori_page_id = rec.ori_page_id](typename Trait::PageID id_to_resolve, PageVersion ver_to_resolve)
-        -> std::tuple<bool, typename Trait::PageID, PageVersion> {
+    auto [resolve_success, resolved_id, resolved_ver] = [&mvcc_table_directory, ori_page_id = rec.ori_page_id](typename Trait::PageId id_to_resolve, PageVersion ver_to_resolve)
+        -> std::tuple<bool, typename Trait::PageId, PageVersion> {
         while (true)
         {
             auto resolve_ver_iter = mvcc_table_directory.find(id_to_resolve);
@@ -1420,7 +1420,7 @@ PageEntriesV3 PageDirectory<Trait>::gcInMemEntries(bool return_removed_entries, 
 
     // The page_id that we need to decrease ref count
     // { id_0: <version, num to decrease>, id_1: <...>, ... }
-    std::map<typename Trait::PageID, std::pair<PageVersion, Int64>> normal_entries_to_deref;
+    std::map<typename Trait::PageId, std::pair<PageVersion, Int64>> normal_entries_to_deref;
     // Iterate all page_id and try to clean up useless var entries
     while (true)
     {

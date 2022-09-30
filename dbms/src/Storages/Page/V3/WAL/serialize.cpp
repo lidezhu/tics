@@ -123,11 +123,11 @@ void deserializePutFrom([[maybe_unused]] const EditRecordType record_type, ReadB
 
     typename EditType::EditRecord rec;
     rec.type = record_type;
-    if constexpr (std::is_same_v<typename EditType::PageID, PageIdV3Internal>)
+    if constexpr (std::is_same_v<typename EditType::PageId, PageIdV3Internal>)
     {
         deserializeUInt128PageIDFrom(buf, rec.page_id);
     }
-    else if constexpr (std::is_same_v<typename EditType::PageID, UniversalPageId>)
+    else if constexpr (std::is_same_v<typename EditType::PageId, UniversalPageId>)
     {
         deserializeUniversalPageIDFrom(buf, rec.page_id);
     }
@@ -166,12 +166,12 @@ void deserializeRefFrom([[maybe_unused]] const EditRecordType record_type, ReadB
 
     typename EditType::EditRecord rec;
     rec.type = record_type;
-    if constexpr (std::is_same_v<typename EditType::PageID, PageIdV3Internal>)
+    if constexpr (std::is_same_v<typename EditType::PageId, PageIdV3Internal>)
     {
         deserializeUInt128PageIDFrom(buf, rec.page_id);
         deserializeUInt128PageIDFrom(buf, rec.ori_page_id);
     }
-    else if constexpr (std::is_same_v<typename EditType::PageID, UniversalPageId>)
+    else if constexpr (std::is_same_v<typename EditType::PageId, UniversalPageId>)
     {
         deserializeUniversalPageIDFrom(buf, rec.page_id);
         deserializeUniversalPageIDFrom(buf, rec.ori_page_id);
@@ -206,11 +206,11 @@ void deserializePutExternalFrom([[maybe_unused]] const EditRecordType record_typ
 
     typename EditType::EditRecord rec;
     rec.type = record_type;
-    if constexpr (std::is_same_v<typename EditType::PageID, PageIdV3Internal>)
+    if constexpr (std::is_same_v<typename EditType::PageId, PageIdV3Internal>)
     {
         deserializeUInt128PageIDFrom(buf, rec.page_id);
     }
-    else if constexpr (std::is_same_v<typename EditType::PageID, UniversalPageId>)
+    else if constexpr (std::is_same_v<typename EditType::PageId, UniversalPageId>)
     {
         deserializeUniversalPageIDFrom(buf, rec.page_id);
     }
@@ -244,11 +244,11 @@ void deserializeDelFrom([[maybe_unused]] const EditRecordType record_type, ReadB
 
     typename EditType::EditRecord rec;
     rec.type = record_type;
-    if constexpr (std::is_same_v<typename EditType::PageID, PageIdV3Internal>)
+    if constexpr (std::is_same_v<typename EditType::PageId, PageIdV3Internal>)
     {
         deserializeUInt128PageIDFrom(buf, rec.page_id);
     }
-    else if constexpr (std::is_same_v<typename EditType::PageID, UniversalPageId>)
+    else if constexpr (std::is_same_v<typename EditType::PageId, UniversalPageId>)
     {
         deserializeUniversalPageIDFrom(buf, rec.page_id);
     }

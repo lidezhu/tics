@@ -17,7 +17,6 @@
 #include <Common/nocopyable.h>
 #include <Storages/Page/V3/LogFile/LogFilename.h>
 #include <Storages/Page/V3/LogFile/LogReader.h>
-#include <Storages/Page/V3/PageEntriesEdit.h>
 #include <Storages/Page/V3/WALStore.h>
 
 namespace DB
