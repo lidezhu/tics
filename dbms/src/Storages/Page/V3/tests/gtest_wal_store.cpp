@@ -370,9 +370,8 @@ TEST_P(WALStoreTest, Empty)
     ASSERT_NE(wal, nullptr);
     while (reader->remained())
     {
-        auto [ok, edit] = reader->next();
-        (void)edit;
-        if (!ok)
+        auto record = reader->next();
+        if (!record)
         {
             reader->throwIfError();
             // else it just run to the end of file.
@@ -425,10 +424,11 @@ try
         size_t num_applied_edit = 0;
         while (reader->remained())
         {
-            const auto & [ok, edit] = reader->next();
-            if (!ok)
+            const auto record = reader->next();
+            if (!record)
                 break;
             // Details of each edit is verified in `WALSeriTest`
+            auto edit = ser::deserializeFrom(record.value());
             EXPECT_EQ(size_each_edit[num_applied_edit], edit.size());
             num_applied_edit += 1;
         }
@@ -457,10 +457,11 @@ try
         size_t num_applied_edit = 0;
         while (reader->remained())
         {
-            const auto & [ok, edit] = reader->next();
-            if (!ok)
+            const auto record = reader->next();
+            if (!record)
                 break;
             // Details of each edit is verified in `WALSeriTest`
+            auto edit = ser::deserializeFrom(record.value());
             EXPECT_EQ(size_each_edit[num_applied_edit], edit.size());
             num_applied_edit += 1;
         }
@@ -491,10 +492,11 @@ try
         auto reader = WALStoreReader::create(getCurrentTestName(), provider, delegator);
         while (reader->remained())
         {
-            const auto & [ok, edit] = reader->next();
-            if (!ok)
+            const auto record = reader->next();
+            if (!record)
                 break;
             // Details of each edit is verified in `WALSeriTest`
+            auto edit = ser::deserializeFrom(record.value());
             EXPECT_EQ(size_each_edit[num_applied_edit], edit.size());
             num_applied_edit += 1;
         }
@@ -562,10 +564,11 @@ try
         auto reader = WALStoreReader::create(getCurrentTestName(), provider, delegator);
         while (reader->remained())
         {
-            const auto & [ok, edit] = reader->next();
-            if (!ok)
+            const auto record = reader->next();
+            if (!record)
                 break;
             // Details of each edit is verified in `WALSeriTest`
+            auto edit = ser::deserializeFrom(record.value());
             EXPECT_EQ(size_each_edit[num_applied_edit], edit.size()) << fmt::format("edit size not match at idx={}", num_applied_edit);
             num_applied_edit += 1;
         }
@@ -577,14 +580,15 @@ try
         std::tie(wal, reader) = WALStore::create(getCurrentTestName(), provider, delegator, config);
         while (reader->remained())
         {
-            auto [ok, edit] = reader->next();
-            if (!ok)
+            auto record = reader->next();
+            if (!record)
             {
                 reader->throwIfError();
                 // else it just run to the end of file.
                 break;
             }
             // Details of each edit is verified in `WALSeriTest`
+            auto edit = ser::deserializeFrom(record.value());
             EXPECT_EQ(size_each_edit[num_applied_edit], edit.size()) << fmt::format("edit size not match at idx={}", num_applied_edit);
             num_applied_edit += 1;
         }
@@ -638,13 +642,14 @@ try
     std::tie(wal, reader) = WALStore::create(getCurrentTestName(), enc_provider, delegator, config);
     while (reader->remained())
     {
-        auto [ok, edit] = reader->next();
-        if (!ok)
+        auto record = reader->next();
+        if (!record)
         {
             reader->throwIfError();
             // else it just run to the end of file.
             break;
         }
+        auto edit = ser::deserializeFrom(record.value());
         num_pages_read += edit.size();
         EXPECT_EQ(size_each_edit[num_edits_read], edit.size()) << fmt::format("at idx={}", num_edits_read);
         num_edits_read += 1;
@@ -680,13 +685,14 @@ try
     std::tie(wal, reader) = WALStore::create(getCurrentTestName(), enc_provider, delegator, config);
     while (reader->remained())
     {
-        auto [ok, edit] = reader->next();
-        if (!ok)
+        auto record = reader->next();
+        if (!record)
         {
             reader->throwIfError();
             // else it just run to the end of file.
             break;
         }
+        auto edit = ser::deserializeFrom(record.value());
         num_pages_read += edit.size();
         num_edits_read += 1;
     }
