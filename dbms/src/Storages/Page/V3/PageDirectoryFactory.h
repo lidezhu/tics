@@ -82,6 +82,7 @@ struct FactoryTrait
     using PageDirectoryType = PageDirectory<DB::PS::V3::universal::PageDirectoryTrait>;
     using PageEntriesEdit = DB::PS::V3::universal::PageEntriesEdit;
     using ExternalIdTrait = ExternalIdTrait;
+    using Serializer = Serializer;
 };
 using PageDirectoryFactory = DB::PS::V3::PageDirectoryFactory<FactoryTrait>;
 } // namespace universal
@@ -94,6 +95,7 @@ struct FactoryTrait
     using PageDirectoryType = PageDirectory<DB::PS::V3::u128::PageDirectoryTrait>;
     using PageEntriesEdit = DB::PS::V3::u128::PageEntriesEdit;
     using ExternalIdTrait = ExternalIdTrait;
+    using Serializer = Serializer;
 };
 using PageDirectoryFactory = DB::PS::V3::PageDirectoryFactory<FactoryTrait>;
 } // namespace u128
