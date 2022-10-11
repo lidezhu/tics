@@ -296,9 +296,9 @@ void deserializeFrom(ReadBuffer & buf, EditType & edit)
     }
 }
 
-namespace u128::ser
+namespace u128
 {
-String serializeTo(const PageEntriesEdit & edit)
+String Serializer::serializeTo(const PageEntriesEdit & edit)
 {
     WriteBufferFromOwnString buf;
     UInt32 version = 1;
@@ -328,7 +328,7 @@ String serializeTo(const PageEntriesEdit & edit)
     }
     return buf.releaseStr();
 }
-u128::PageEntriesEdit deserializeFrom(std::string_view record)
+u128::PageEntriesEdit Serializer::deserializeFrom(std::string_view record)
 {
     u128::PageEntriesEdit edit;
     ReadBufferFromMemory buf(record.data(), record.size());
@@ -340,10 +340,10 @@ u128::PageEntriesEdit deserializeFrom(std::string_view record)
     DB::PS::V3::deserializeFrom(buf, edit);
     return edit;
 }
-} // namespace u128::ser
-namespace universal::ser
+} // namespace u128
+namespace universal
 {
-String serializeTo(const PageEntriesEdit & edit)
+String Serializer::serializeTo(const PageEntriesEdit & edit)
 {
     WriteBufferFromOwnString buf;
     UInt32 version = 1;
@@ -373,7 +373,7 @@ String serializeTo(const PageEntriesEdit & edit)
     }
     return buf.releaseStr();
 }
-universal::PageEntriesEdit deserializeFrom(std::string_view record)
+universal::PageEntriesEdit Serializer::deserializeFrom(std::string_view record)
 {
     universal::PageEntriesEdit edit;
     ReadBufferFromMemory buf(record.data(), record.size());
@@ -385,6 +385,6 @@ universal::PageEntriesEdit deserializeFrom(std::string_view record)
     DB::PS::V3::deserializeFrom(buf, edit);
     return edit;
 }
-} // namespace universal::ser
+} // namespace universal
 
 } // namespace DB::PS::V3
