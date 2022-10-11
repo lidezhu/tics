@@ -312,7 +312,7 @@ VersionedPageEntries<Trait>::resolveToPageId(UInt64 seq, bool ignore_delete, Pag
             if (!ignore_delete && iter->second.isDelete())
             {
                 // the page is not visible
-                return {ResolveResult::FAIL, Trait::getInvalidID(), PageVersion(0)};
+                return {ResolveResult::FAIL, ExternalIdTrait::getInvalidID(), PageVersion(0)};
             }
 
             // If `ignore_delete` is true, we need the page entry even if it is logical deleted.
@@ -329,7 +329,7 @@ VersionedPageEntries<Trait>::resolveToPageId(UInt64 seq, bool ignore_delete, Pag
                 // copy and return the entry
                 if (entry != nullptr)
                     *entry = iter->second.entry;
-                return {ResolveResult::TO_NORMAL, Trait::getInvalidID(), PageVersion(0)};
+                return {ResolveResult::TO_NORMAL, ExternalIdTrait::getInvalidID(), PageVersion(0)};
             }
             // else fallthrough to FAIL
         } // else fallthrough to FAIL
@@ -341,7 +341,7 @@ VersionedPageEntries<Trait>::resolveToPageId(UInt64 seq, bool ignore_delete, Pag
         bool ok = ignore_delete || (!is_deleted || seq < delete_ver.sequence);
         if (create_ver.sequence <= seq && ok)
         {
-            return {ResolveResult::TO_NORMAL, Trait::getInvalidID(), PageVersion(0)};
+            return {ResolveResult::TO_NORMAL, ExternalIdTrait::getInvalidID(), PageVersion(0)};
         }
     }
     else if (type == EditRecordType::VAR_REF)
@@ -357,7 +357,7 @@ VersionedPageEntries<Trait>::resolveToPageId(UInt64 seq, bool ignore_delete, Pag
         LOG_FMT_WARNING(&Poco::Logger::get("VersionedPageEntries"), "Can't resolve the EditRecordType {}", type);
     }
 
-    return {ResolveResult::FAIL, Trait::getInvalidID(), PageVersion(0)};
+    return {ResolveResult::FAIL, ExternalIdTrait::getInvalidID(), PageVersion(0)};
 }
 
 template <typename Trait>
@@ -1005,7 +1005,7 @@ typename Trait::PageId PageDirectory<Trait>::getNormalPageId(const typename Trai
                 }
                 else
                 {
-                    return Trait::getInvalidID();
+                    return ExternalIdTrait::getInvalidID();
                 }
             }
         }
@@ -1042,7 +1042,7 @@ typename Trait::PageId PageDirectory<Trait>::getNormalPageId(const typename Trai
     }
     else
     {
-        return Trait::getInvalidID();
+        return ExternalIdTrait::getInvalidID();
     }
 }
 
@@ -1111,7 +1111,7 @@ void PageDirectory<Trait>::applyRefEditRecord(
         {
             auto resolve_ver_iter = mvcc_table_directory.find(id_to_resolve);
             if (resolve_ver_iter == mvcc_table_directory.end())
-                return {false, Trait::getInvalidID(), PageVersion(0)};
+                return {false, ExternalIdTrait::getInvalidID(), PageVersion(0)};
 
             const VersionedPageEntriesPtr & resolve_version_list = resolve_ver_iter->second;
             auto [resolve_state, next_id_to_resolve, next_ver_to_resolve] = resolve_version_list->resolveToPageId(
@@ -1189,7 +1189,7 @@ void PageDirectory<Trait>::apply(typename Trait::PageEntriesEdit && edit, const 
     for (const auto & r : edit.getRecords())
     {
         // Protected in write_lock
-        max_page_id = std::max(max_page_id, Trait::getU64ID(r.page_id));
+        max_page_id = std::max(max_page_id, ExternalIdTrait::getU64ID(r.page_id));
 
         auto [iter, created] = mvcc_table_directory.insert(std::make_pair(r.page_id, nullptr));
         if (created)
@@ -1534,7 +1534,7 @@ typename Trait::PageEntriesEdit PageDirectory<Trait>::dumpSnapshotToEdit(PageDir
 }
 
 template class PageDirectory<u128::PageDirectoryTrait>;
-// template class PageDirectory<PageDirectoryStringTrait>;
+// template class PageDirectory<universal::PageDirectoryTrait>;
 
 } // namespace PS::V3
 } // namespace DB
