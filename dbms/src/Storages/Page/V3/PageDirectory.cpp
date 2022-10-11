@@ -1182,7 +1182,7 @@ void PageDirectory<Trait>::apply(typename Trait::PageEntriesEdit && edit, const 
     {
         r.version = new_version;
     }
-    wal->apply(Trait::serializeTo(edit), write_limiter);
+    wal->apply(Trait::Serializer::serializeTo(edit), write_limiter);
 
     // stage 2, create entry version list for page_id.
     for (const auto & r : edit.getRecords())
@@ -1250,7 +1250,7 @@ void PageDirectory<Trait>::gcApply(typename Trait::PageEntriesEdit && migrated_e
     }
 
     // Apply migrate edit into WAL with the increased epoch version
-    wal->apply(Trait::serializeTo(migrated_edit), write_limiter);
+    wal->apply(Trait::Serializer::serializeTo(migrated_edit), write_limiter);
 
     // Apply migrate edit to the mvcc map
     for (const auto & record : migrated_edit.getRecords())
@@ -1372,7 +1372,7 @@ bool PageDirectory<Trait>::tryDumpSnapshot(const ReadLimiterPtr & read_limiter, 
         auto edit_from_disk = collapsed_dir->dumpSnapshotToEdit();
         done_any_io = wal->saveSnapshot(
             std::move(files_snap),
-            Trait::serializeTo(edit_from_disk),
+            Trait::Serializer::serializeTo(edit_from_disk),
             edit_from_disk.size(),
             write_limiter);
     }
