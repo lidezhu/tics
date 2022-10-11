@@ -50,7 +50,7 @@ namespace PS::V3::tests
 TEST(ExternalIdsByNamespace, Simple)
 {
     NamespaceId ns_id = 100;
-    ExternalIdsByNamespace external_ids_by_ns;
+    ExternalIdsByNamespace<u128::ExternalIdTrait> external_ids_by_ns;
 
     std::atomic<Int32> who(0);
 
