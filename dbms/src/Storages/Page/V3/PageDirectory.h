@@ -330,9 +330,13 @@ public:
     // When dump snapshot, we need to keep the last valid entry. Check out `tryDumpSnapshot` for the reason.
     PageEntriesV3 gcInMemEntries(bool return_removed_entries = true, bool keep_last_valid_var_entry = false);
 
+private:
+    using ExternalIdTrait = typename Trait::ExternalIdTrait;
+
+public:
     // Get the external id that is not deleted or being ref by another id by
     // `ns_id`.
-    std::set<PageId> getAliveExternalIds(NamespaceId ns_id) const
+    std::set<DB::PageId> getAliveExternalIds(const typename ExternalIdTrait::Prefix & ns_id) const
     {
         return external_ids_by_ns.getAliveIds(ns_id);
     }
@@ -340,7 +344,7 @@ public:
     // After table dropped, the `getAliveIds` with specified
     // `ns_id` will not be cleaned. We need this method to
     // cleanup all external id ptrs.
-    void unregisterNamespace(NamespaceId ns_id)
+    void unregisterNamespace(const typename ExternalIdTrait::Prefix & ns_id)
     {
         external_ids_by_ns.unregisterNamespace(ns_id);
     }
@@ -367,7 +371,6 @@ private:
     getByIDsImpl(const typename Trait::PageIds & page_ids, const PageDirectorySnapshotPtr & snap, bool throw_on_not_exist) const;
 
 private:
-    using ExternalIdTrait = typename Trait::ExternalIdTrait;
     // Only `std::map` is allow for `MVCCMap`. Cause `std::map::insert` ensure that
     // "No iterators or references are invalidated"
     // https://en.cppreference.com/w/cpp/container/map/insert
