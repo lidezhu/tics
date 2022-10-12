@@ -57,7 +57,7 @@ public:
     // Note that the result is meaningless unless `getAliveIds`
     // or `unregisterNamespace` is called to cleanup invalid
     // external ids.
-    bool existNamespace(NamespaceId ns_id) const
+    bool existNamespace(const Prefix & ns_id) const
     {
         std::lock_guard map_guard(mu);
         return ids_by_ns.count(ns_id) > 0;
