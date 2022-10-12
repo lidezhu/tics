@@ -21,6 +21,7 @@
 #include <Storages/Page/Page.h>
 #include <Storages/Page/PageDefines.h>
 #include <Storages/Page/UniversalPage.h>
+#include <Storages/Page/UniversalWriteBatch.h>
 #include <Storages/Page/V3/Blob/BlobConfig.h>
 #include <Storages/Page/V3/Blob/BlobFile.h>
 #include <Storages/Page/V3/Blob/BlobStat.h>
@@ -32,9 +33,6 @@
 #include <Storages/PathPool.h>
 
 #include <mutex>
-
-#include "Storages/Page/UniversalWriteBatch.h"
-#include "Storages/Page/WriteBatch.h"
 
 namespace DB
 {
