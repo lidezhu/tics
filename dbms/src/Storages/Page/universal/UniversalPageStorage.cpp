@@ -1,8 +1,3 @@
-#include <Storages/Page/UniversalPageStorage.h>
-#include <Storages/Page/V3/Blob/BlobConfig.h>
-#include <Storages/Page/V3/BlobStore.h>
-#include <Storages/Page/V3/PageDirectoryFactory.h>
-#include <Storages/Page/V3/PageStorageImpl.h>
 // Copyright 2022 PingCAP, Ltd.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Storages/Page/UniversalPageStorage.h>
+#include <Storages/Page/V3/Blob/BlobConfig.h>
+#include <Storages/Page/V3/BlobStore.h>
+#include <Storages/Page/V3/PageDirectoryFactory.h>
+#include <Storages/Page/V3/PageStorageImpl.h>
 #include <Storages/Page/V3/WAL/WALConfig.h>
 
 namespace DB
