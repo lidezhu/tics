@@ -75,12 +75,10 @@ public:
 
 protected:
     FileProviderPtr file_provider;
-    std::unique_ptr<StoragePathPool> path_pool;
     PSDiskDelegatorPtr delegator;
     PageStorage::Config config;
     std::shared_ptr<PageStorageImpl> page_storage;
 
-    std::list<PageDirectorySnapshotPtr> snapshots_holder;
     size_t fixed_test_buff_size = 1024;
 
     size_t epoch_offset = 0;
