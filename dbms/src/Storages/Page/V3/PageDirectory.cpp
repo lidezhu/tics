@@ -1056,12 +1056,29 @@ template <typename Trait>
 typename Trait::PageIdSet PageDirectory<Trait>::getAllPageIds()
 {
     typename Trait::PageIdSet page_ids;
-    std::shared_lock read_lock(table_rw_mutex);
 
+    std::shared_lock read_lock(table_rw_mutex);
     for (auto & [page_id, versioned] : mvcc_table_directory)
     {
         (void)versioned;
         page_ids.insert(page_id);
+    }
+    return page_ids;
+}
+
+template <typename Trait>
+typename Trait::PageIdSet PageDirectory<Trait>::getRangePageIds(const typename Trait::PageId & start, const typename Trait::PageId & end)
+{
+    typename Trait::PageIdSet page_ids;
+
+    std::shared_lock read_lock(table_rw_mutex);
+    for (auto iter = mvcc_table_directory.lower_bound(start);
+         iter != mvcc_table_directory.end();
+         ++iter)
+    {
+        if (iter->first >= end)
+            break;
+        page_ids.insert(iter->first);
     }
     return page_ids;
 }
