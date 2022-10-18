@@ -223,7 +223,7 @@ TEST(WALUinversalSeriTest, AllPuts)
 
 TEST(WALLognameTest, parsing)
 {
-    LoggerPtr log = Logger::get("WALLognameTest");
+    LoggerPtr log = Logger::get();
     const String parent_path("/data1");
 
     {
@@ -269,7 +269,7 @@ TEST(WALLognameTest, parsing)
 
 TEST(WALLognameSetTest, ordering)
 {
-    LoggerPtr log = Logger::get("WALLognameTest");
+    LoggerPtr log = Logger::get();
     const String parent_path("/data1");
 
     LogFilenameSet filenames;
@@ -309,7 +309,7 @@ class WALStoreTest
 public:
     WALStoreTest()
         : multi_paths(GetParam())
-        , log(Logger::get("WALStoreTest"))
+        , log(Logger::get())
     {
     }
 

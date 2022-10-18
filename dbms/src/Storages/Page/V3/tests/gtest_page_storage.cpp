@@ -1293,7 +1293,7 @@ try
     }
 
     sp_gc.next(); // continue the gc
-    th_gc.wait();
+    th_gc.get();
 
     ASSERT_EQ(*ptr, 100 + 4);
 }
@@ -1334,7 +1334,7 @@ try
     ptr = nullptr;
 
     sp_gc.next(); // continue the gc
-    th_gc.wait();
+    th_gc.get();
 }
 CATCH
 
@@ -1645,7 +1645,7 @@ try
     }
 
     auto getLogFileNum = [&]() {
-        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get("PageStorageTest", ""));
+        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get());
         return log_files.size();
     };
 
@@ -1721,7 +1721,7 @@ try
     }
 
     auto getLogFileNum = [&]() {
-        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get("PageStorageTest", ""));
+        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get());
         return log_files.size();
     };
 

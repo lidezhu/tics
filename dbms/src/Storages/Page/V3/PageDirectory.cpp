@@ -269,7 +269,9 @@ template <typename Trait>
 typename Trait::PageIdSharedPtr VersionedPageEntries<Trait>::fromRestored(const typename Trait::EditRecord & rec)
 {
     auto page_lock = acquireLock();
-    if (rec.type == EditRecordType::VAR_REF)
+    switch (rec.type)
+    {
+    case EditRecordType::VAR_REF:
     {
         type = EditRecordType::VAR_REF;
         is_deleted = false;
@@ -277,7 +279,7 @@ typename Trait::PageIdSharedPtr VersionedPageEntries<Trait>::fromRestored(const 
         ori_page_id = rec.ori_page_id;
         return nullptr;
     }
-    else if (rec.type == EditRecordType::VAR_EXTERNAL)
+    case EditRecordType::VAR_EXTERNAL:
     {
         type = EditRecordType::VAR_EXTERNAL;
         is_deleted = false;
@@ -286,15 +288,16 @@ typename Trait::PageIdSharedPtr VersionedPageEntries<Trait>::fromRestored(const 
         external_holder = std::make_shared<typename Trait::PageId>(rec.page_id);
         return external_holder;
     }
-    else if (rec.type == EditRecordType::VAR_ENTRY)
+    case EditRecordType::VAR_ENTRY:
     {
         type = EditRecordType::VAR_ENTRY;
         entries.emplace(rec.version, EntryOrDelete::newFromRestored(rec.entry, rec.being_ref_count));
         return nullptr;
     }
-    else
+    default:
     {
-        throw Exception(fmt::format("Calling VersionedPageEntries::fromRestored with unknown type: {}", rec.type));
+        throw Exception(fmt::format("Calling VersionedPageEntries::fromRestored with unknown type: {}", static_cast<Int32>(rec.type)));
+    }
     }
 }
 
@@ -354,7 +357,7 @@ VersionedPageEntries<Trait>::resolveToPageId(UInt64 seq, bool ignore_delete, Pag
     }
     else
     {
-        LOG_WARNING(&Poco::Logger::get("VersionedPageEntries"), "Can't resolve the EditRecordType {}", type);
+        LOG_WARNING(&Poco::Logger::get("VersionedPageEntries"), "Can't resolve the EditRecordType {}", static_cast<Int32>(type));
     }
 
     return {ResolveResult::FAIL, ExternalIdTrait::getInvalidID(), PageVersion(0)};
@@ -757,7 +760,7 @@ PageDirectory<Trait>::PageDirectory(String storage_name, WALStorePtr && wal_, UI
     , sequence(0)
     , wal(std::move(wal_))
     , max_persisted_log_files(max_persisted_log_files_)
-    , log(Logger::get("PageDirectory", std::move(storage_name)))
+    , log(Logger::get(storage_name))
 {
 }
 
@@ -1243,12 +1246,12 @@ void PageDirectory<Trait>::apply(typename Trait::PageEntriesEdit && edit, const 
             case EditRecordType::VAR_ENTRY:
             case EditRecordType::VAR_EXTERNAL:
             case EditRecordType::VAR_REF:
-                throw Exception(fmt::format("should not handle edit with invalid type [type={}]", r.type));
+                throw Exception(fmt::format("should not handle edit with invalid type [type={}]", magic_enum::enum_name(r.type)));
             }
         }
         catch (DB::Exception & e)
         {
-            e.addMessage(fmt::format(" [type={}] [page_id={}] [ver={}] [edit_size={}]", r.type, r.page_id, new_version, edit.size()));
+            e.addMessage(fmt::format(" [type={}] [page_id={}] [ver={}] [edit_size={}]", magic_enum::enum_name(r.type), r.page_id, new_version, edit.size()));
             e.rethrow();
         }
     }
