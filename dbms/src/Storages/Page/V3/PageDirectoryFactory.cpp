@@ -204,7 +204,7 @@ void PageDirectoryFactory<Trait>::applyRecord(
     }
     catch (DB::Exception & e)
     {
-        e.addMessage(fmt::format(" [type={}] [page_id={}] [ver={}]", r.type, r.page_id, restored_version));
+        e.addMessage(fmt::format(" [type={}] [page_id={}] [ver={}]", magic_enum::enum_name(r.type), r.page_id, restored_version));
         throw e;
     }
 }

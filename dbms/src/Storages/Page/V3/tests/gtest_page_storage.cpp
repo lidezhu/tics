@@ -63,7 +63,7 @@ public:
         page_storage->restore();
     }
 
-    std::shared_ptr<PageStorageImpl> reopenWithConfig(const PageStorage::Config & config_)
+    std::shared_ptr<PageStorageImpl> reopenWithConfig(const PageStorageConfig & config_)
     {
         auto path = getTemporaryPath();
         delegator = std::make_shared<DB::tests::MockDiskDelegatorSingle>(path);
@@ -76,7 +76,7 @@ public:
 protected:
     FileProviderPtr file_provider;
     PSDiskDelegatorPtr delegator;
-    PageStorage::Config config;
+    PageStorageConfig config;
     std::shared_ptr<PageStorageImpl> page_storage;
 
     size_t fixed_test_buff_size = 1024;
@@ -786,7 +786,7 @@ try
     }
 
     // Restore, the broken meta should be ignored
-    page_storage = reopenWithConfig(PageStorage::Config{});
+    page_storage = reopenWithConfig(PageStorageConfig{});
 
     {
         size_t num_pages = 0;
@@ -815,7 +815,7 @@ try
     }
 
     // Restore again, we should be able to read page 1
-    page_storage = reopenWithConfig(PageStorage::Config{});
+    page_storage = reopenWithConfig(PageStorageConfig{});
 
     {
         size_t num_pages = 0;
@@ -890,7 +890,7 @@ try
     }
 
     // Restore again, we should be able to read page 1
-    page_storage = reopenWithConfig(PageStorage::Config{});
+    page_storage = reopenWithConfig(PageStorageConfig{});
 
     {
         size_t num_pages = 0;
@@ -1293,7 +1293,7 @@ try
     }
 
     sp_gc.next(); // continue the gc
-    th_gc.wait();
+    th_gc.get();
 
     ASSERT_EQ(*ptr, 100 + 4);
 }
@@ -1334,7 +1334,7 @@ try
     ptr = nullptr;
 
     sp_gc.next(); // continue the gc
-    th_gc.wait();
+    th_gc.get();
 }
 CATCH
 
@@ -1563,7 +1563,7 @@ TEST_F(PageStorageTest, EntryTagAfterFullGC)
 try
 {
     {
-        PageStorage::Config config;
+        PageStorageConfig config;
         config.blob_heavy_gc_valid_rate = 1.0; /// always run full gc
         page_storage = reopenWithConfig(config);
     }
@@ -1613,7 +1613,7 @@ TEST_F(PageStorageTest, DumpPageStorageSnapshot)
 try
 {
     {
-        PageStorage::Config config;
+        PageStorageConfig config;
         config.blob_heavy_gc_valid_rate = 1.0; /// always run full gc
         config.wal_roll_size = 1 * 1024 * 1024; /// make the wal file more easy to roll
         config.wal_max_persisted_log_files = 10; /// avoid checkpoint when gc
@@ -1645,7 +1645,7 @@ try
     }
 
     auto getLogFileNum = [&]() {
-        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get("PageStorageTest", ""));
+        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get());
         return log_files.size();
     };
 
@@ -1667,7 +1667,7 @@ try
     ASSERT_TRUE(done_snapshot);
 
     {
-        PageStorage::Config config;
+        PageStorageConfig config;
         page_storage = reopenWithConfig(config);
     }
 
@@ -1679,7 +1679,7 @@ TEST_F(PageStorageTest, DumpPageStorageSnapshotWithRefPage)
 try
 {
     {
-        PageStorage::Config config;
+        PageStorageConfig config;
         config.blob_heavy_gc_valid_rate = 1.0; /// always run full gc
         config.wal_roll_size = 1 * 1024 * 1024; /// make the wal file more easy to roll
         config.wal_max_persisted_log_files = 10; /// avoid checkpoint when gc
@@ -1721,7 +1721,7 @@ try
     }
 
     auto getLogFileNum = [&]() {
-        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get("PageStorageTest", ""));
+        auto log_files = WALStoreReader::listAllFiles(delegator, Logger::get());
         return log_files.size();
     };
 
@@ -1743,7 +1743,7 @@ try
     ASSERT_TRUE(done_snapshot);
 
     {
-        PageStorage::Config config;
+        PageStorageConfig config;
         page_storage = reopenWithConfig(config);
     }
 
