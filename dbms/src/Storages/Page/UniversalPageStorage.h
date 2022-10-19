@@ -202,6 +202,14 @@ public:
         }
     }
 
+    UniversalPage read(const UniversalPageId & page_id)
+    {
+        // always traverse with the latest snapshot
+        auto snapshot = uni_storage.getSnapshot(fmt::format("read_{}", page_id));
+        const auto page_id_and_entry = uni_storage.page_directory->getByID(page_id, snapshot);
+        return uni_storage.blob_store->read(page_id_and_entry);
+    }
+
 private:
     UniversalPageStorage & uni_storage;
 };

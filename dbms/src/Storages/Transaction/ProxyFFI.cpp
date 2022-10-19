@@ -16,6 +16,8 @@
 #include <Common/nocopyable.h>
 #include <Interpreters/Context.h>
 #include <Storages/DeltaMerge/ExternalDTFileInfo.h>
+#include <Storages/Page/UniversalWriteBatch.h>
+#include <Storages/Page/UniversalPageStorage.h>
 #include <Storages/PathCapacityMetrics.h>
 #include <Storages/Transaction/FileEncryption.h>
 #include <Storages/Transaction/KVStore.h>
@@ -149,6 +151,136 @@ uint8_t TryFlushData(EngineStoreServerWrap * server, uint64_t region_id, uint8_t
     {
         auto & kvstore = server->tmt->getKVStore();
         return kvstore->tryFlushRegionData(region_id, until_succeed, *server->tmt, index, term);
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+        exit(-1);
+    }
+}
+
+RawCppPtr CreateWriteBatch()
+{
+    return GenRawCppPtr(new UniversalWriteBatch(), RawCppPtrTypeImpl::WriteBatch);
+}
+
+void WriteBatchPutPage(RawVoidPtr ptr, BaseBuffView page_id, BaseBuffView value)
+{
+    auto * wb = reinterpret_cast<UniversalWriteBatch *>(ptr);
+    ReadBufferPtr buff = std::make_shared<ReadBufferFromMemory>(value.data, value.len);
+    wb->putPage(UniversalPageId(page_id.data, page_id.len), 0, buff, value.len);
+}
+
+void WriteBatchDelPage(RawVoidPtr ptr, BaseBuffView page_id)
+{
+    auto * wb = reinterpret_cast<UniversalWriteBatch *>(ptr);
+    wb->delPage(UniversalPageId(page_id.data, page_id.len));
+}
+
+uint64_t WriteBatchSize(RawVoidPtr ptr)
+{
+    auto * wb = reinterpret_cast<UniversalWriteBatch *>(ptr);
+    return wb->getTotalDataSize();
+}
+
+uint8_t WriteBatchIsEmpty(RawVoidPtr ptr)
+{
+    auto * wb = reinterpret_cast<UniversalWriteBatch *>(ptr);
+    return wb->empty();
+}
+
+void WriteBatchMerge(RawVoidPtr lhs, RawVoidPtr rhs)
+{
+    auto * lwb = reinterpret_cast<UniversalWriteBatch *>(lhs);
+    auto * rwb = reinterpret_cast<UniversalWriteBatch *>(rhs);
+    lwb->merge(*rwb);
+    // TODO: do we need clear rhs here?
+}
+
+void WriteBatchClear(RawVoidPtr ptr)
+{
+    auto * wb = reinterpret_cast<UniversalWriteBatch *>(ptr);
+    wb->clear();
+}
+
+void ConsumeWriteBatch(const EngineStoreServerWrap * server, RawVoidPtr ptr)
+{
+    try
+    {
+        auto uni_ps = server->tmt->getContext().getGlobalUniversalPageStorage();
+        auto * wb = reinterpret_cast<UniversalWriteBatch *>(ptr);
+        uni_ps->write(std::move(*wb));
+        // TODO: verify that clear is allowed after std::move and the wb is reusable
+        wb->clear();
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+        exit(-1);
+    }
+}
+
+CppStrWithView HandleReadPage(const EngineStoreServerWrap * server, BaseBuffView page_id)
+{
+    try
+    {
+        auto uni_ps = server->tmt->getContext().getGlobalUniversalPageStorage();
+        RaftLogReader reader(*uni_ps);
+        UniversalPageId id{page_id.data, page_id.len};
+        auto page = reader.read(id);
+        // FIXME: avoid this extra copy
+        if (page.isValid())
+        {
+            auto * value = new String(page.data.begin(), page.data.size());
+            return CppStrWithView{.inner = GenRawCppPtr(value, RawCppPtrTypeImpl::String), .view = BaseBuffView{value->data(), value->size()}};
+        }
+        else
+        {
+            return CppStrWithView{.inner = GenRawCppPtr(), .view = BaseBuffView{}};
+        }
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+        exit(-1);
+    }
+}
+
+CppStrWithViewVec HandleScanPage(const EngineStoreServerWrap * server, BaseBuffView start_page_id, BaseBuffView end_page_id)
+{
+    try
+    {
+        auto uni_ps = server->tmt->getContext().getGlobalUniversalPageStorage();
+        RaftLogReader reader(*uni_ps);
+        UniversalPageId start_id{start_page_id.data, start_page_id.len};
+        UniversalPageId end_id{end_page_id.data, end_page_id.len};
+        std::vector<UniversalPage> pages;
+        // FIXME: avoid all extra copy
+        auto checker = [&](const DB::UniversalPage & page) {
+            pages.push_back(page);
+        };
+        reader.traverse(start_id, end_id, checker);
+        // FIXME: reclaim the space
+        auto * data = static_cast<char *>(malloc(pages.size() * sizeof(CppStrWithView)));
+        for (size_t i = 0; i < pages.size(); i++)
+        {
+            auto & page = pages[i];
+            auto * target = reinterpret_cast<CppStrWithView *>(data) + i;
+            if (page.isValid())
+            {
+                auto * value = new String(page.data.begin(), page.data.size());
+                target->inner = GenRawCppPtr(value, RawCppPtrTypeImpl::String);
+                BaseBuffView temp{.data = value->data(), .len = value->size()};
+                memcpy(reinterpret_cast<char *>(target) + sizeof(RawCppPtr), &temp, sizeof(BaseBuffView));
+            }
+            else
+            {
+                target->inner = GenRawCppPtr();
+                BaseBuffView temp{.data = nullptr, .len = 0};
+                memcpy(reinterpret_cast<char *>(target) + sizeof(RawCppPtr), &temp, sizeof(BaseBuffView));
+            }
+        }
+        return CppStrWithViewVec{.inner = reinterpret_cast<CppStrWithView *>(data), .len = pages.size() };
     }
     catch (...)
     {
@@ -450,6 +582,9 @@ void GcRawCppPtr(RawVoidPtr ptr, RawCppPtrType type)
             break;
         case RawCppPtrTypeImpl::WakerNotifier:
             delete reinterpret_cast<AsyncNotifier *>(ptr);
+            break;
+        case RawCppPtrTypeImpl::WriteBatch:
+            delete reinterpret_cast<UniversalWriteBatch *>(ptr);
             break;
         default:
             LOG_ERROR(&Poco::Logger::get(__FUNCTION__), "unknown type {}", type);

@@ -55,6 +55,7 @@
 #include <Storages/IStorage.h>
 #include <Storages/MarkCache.h>
 #include <Storages/Page/V3/PageStorageImpl.h>
+#include <Storages/Page/UniversalPageStorage.h>
 #include <Storages/PathCapacityMetrics.h>
 #include <Storages/PathPool.h>
 #include <Storages/Transaction/BackgroundService.h>
@@ -157,6 +158,7 @@ struct ContextShared
     IORateLimiter io_rate_limiter;
     PageStorageRunMode storage_run_mode = PageStorageRunMode::ONLY_V3;
     DM::GlobalStoragePoolPtr global_storage_pool;
+    UniversalPageStoragePtr uni_page_storage;
     /// Named sessions. The user could specify session identifier to reuse settings and temporary tables in subsequent requests.
 
     class SessionKeyHash
@@ -1596,6 +1598,22 @@ DM::GlobalStoragePoolPtr Context::getGlobalStoragePool() const
 {
     auto lock = getLock();
     return shared->global_storage_pool;
+}
+
+void Context::initializeGlobalUniversalPageStorage(const PathPool & path_pool, const FileProviderPtr & file_provider)
+{
+    auto lock = getLock();
+    if (shared->uni_page_storage)
+        throw Exception("UniversalPageStorage has already been initialized.", ErrorCodes::LOGICAL_ERROR);
+
+    UniversalPageStorage::Config config;
+    shared->uni_page_storage = UniversalPageStorage::create("global", path_pool.getPSDiskDelegatorGlobalMulti("global"), config, file_provider);
+}
+
+UniversalPageStoragePtr Context::getGlobalUniversalPageStorage() const
+{
+    auto lock = getLock();
+    return shared->uni_page_storage;
 }
 
 UInt16 Context::getTCPPort() const
