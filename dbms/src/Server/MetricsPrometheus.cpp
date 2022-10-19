@@ -233,47 +233,48 @@ MetricsPrometheus::~MetricsPrometheus()
 
 void MetricsPrometheus::run()
 {
-    auto & tiflash_metrics = TiFlashMetrics::instance();
-    for (ProfileEvents::Event event = 0; event < ProfileEvents::end(); event++)
-    {
-        const auto value = ProfileEvents::counters[event].load(std::memory_order_relaxed);
-        tiflash_metrics.registered_profile_events[event]->Set(value);
-    }
-
-    for (CurrentMetrics::Metric metric = 0; metric < CurrentMetrics::end(); metric++)
-    {
-        const auto value = CurrentMetrics::values[metric].load(std::memory_order_relaxed);
-        tiflash_metrics.registered_current_metrics[metric]->Set(value);
-    }
-
-    auto async_metric_values = async_metrics.getValues();
-    for (const auto & metric : async_metric_values)
-    {
-        const auto & origin_name = metric.first;
-        const auto & value = metric.second;
-        if (!tiflash_metrics.registered_async_metrics.count(origin_name))
-        {
-            // Register this async metric into registry on flight, as async metrics are not accumulated at once.
-            auto prometheus_name = TiFlashMetrics::async_metrics_prefix + metric.first;
-            // Prometheus doesn't allow metric name containing dot.
-            std::replace(prometheus_name.begin(), prometheus_name.end(), '.', '_');
-            auto & family = prometheus::BuildGauge()
-                                .Name(prometheus_name)
-                                .Help("System asynchronous metric " + prometheus_name)
-                                .Register(*(tiflash_metrics.registry));
-            // Use original name as key for the sake of further accesses.
-            tiflash_metrics.registered_async_metrics.emplace(origin_name, &family.Add({}));
-        }
-        tiflash_metrics.registered_async_metrics[origin_name]->Set(value);
-    }
-
-    if (gateway != nullptr)
-    {
-        if (auto return_code = gateway->Push(); return_code != 200)
-        {
-            LOG_FMT_WARNING(log, "Failed to push metrics to gateway, return code is {}", return_code);
-        }
-    }
+    (void)async_metrics;
+//    auto & tiflash_metrics = TiFlashMetrics::instance();
+//    for (ProfileEvents::Event event = 0; event < ProfileEvents::end(); event++)
+//    {
+//        const auto value = ProfileEvents::counters[event].load(std::memory_order_relaxed);
+//        tiflash_metrics.registered_profile_events[event]->Set(value);
+//    }
+//
+//    for (CurrentMetrics::Metric metric = 0; metric < CurrentMetrics::end(); metric++)
+//    {
+//        const auto value = CurrentMetrics::values[metric].load(std::memory_order_relaxed);
+//        tiflash_metrics.registered_current_metrics[metric]->Set(value);
+//    }
+//
+//    auto async_metric_values = async_metrics.getValues();
+//    for (const auto & metric : async_metric_values)
+//    {
+//        const auto & origin_name = metric.first;
+//        const auto & value = metric.second;
+//        if (!tiflash_metrics.registered_async_metrics.count(origin_name))
+//        {
+//            // Register this async metric into registry on flight, as async metrics are not accumulated at once.
+//            auto prometheus_name = TiFlashMetrics::async_metrics_prefix + metric.first;
+//            // Prometheus doesn't allow metric name containing dot.
+//            std::replace(prometheus_name.begin(), prometheus_name.end(), '.', '_');
+//            auto & family = prometheus::BuildGauge()
+//                                .Name(prometheus_name)
+//                                .Help("System asynchronous metric " + prometheus_name)
+//                                .Register(*(tiflash_metrics.registry));
+//            // Use original name as key for the sake of further accesses.
+//            tiflash_metrics.registered_async_metrics.emplace(origin_name, &family.Add({}));
+//        }
+//        tiflash_metrics.registered_async_metrics[origin_name]->Set(value);
+//    }
+//
+//    if (gateway != nullptr)
+//    {
+//        if (auto return_code = gateway->Push(); return_code != 200)
+//        {
+//            LOG_FMT_WARNING(log, "Failed to push metrics to gateway, return code is {}", return_code);
+//        }
+//    }
 }
 
 } // namespace DB
