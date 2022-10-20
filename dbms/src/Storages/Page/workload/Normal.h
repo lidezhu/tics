@@ -56,7 +56,7 @@ public:
         // init all pages in PageStorage
         if (options.init_pages || options.just_init_pages)
         {
-            PSWriter::fillAllPages(ps);
+            PSWriter::fillAllPages(ps, uni_ps);
             LOG_INFO(StressEnv::logger, "All pages have been init.");
             if (options.just_init_pages)
             {

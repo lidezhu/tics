@@ -17,6 +17,7 @@
 #include <Poco/Logger.h>
 #include <Storages/Page/V2/PageStorage.h>
 #include <Storages/Page/V3/PageStorageImpl.h>
+#include <Storages/Page/universal/UniversalPageStorage.h>
 #include <Storages/Page/workload/PSWorkload.h>
 #include <TestUtils/MockDiskDelegator.h>
 
@@ -25,12 +26,11 @@ namespace DB::PS::tests
 void StressWorkload::onDumpResult()
 {
     UInt64 time_interval = stop_watch.elapsedMilliseconds();
-    LOG_INFO(options.logger, fmt::format("result in {}ms", time_interval));
+    LOG_INFO(options.logger, "result in {}ms", time_interval);
     double seconds_run = 1.0 * time_interval / 1000;
 
     size_t total_pages_written = 0;
     size_t total_bytes_written = 0;
-
     for (auto & writer : writers)
     {
         total_pages_written += writer->pages_used;
@@ -39,7 +39,6 @@ void StressWorkload::onDumpResult()
 
     size_t total_pages_read = 0;
     size_t total_bytes_read = 0;
-
     for (auto & reader : readers)
     {
         total_pages_read += reader->pages_used;
@@ -47,17 +46,15 @@ void StressWorkload::onDumpResult()
     }
 
     LOG_INFO(options.logger,
-             fmt::format(
-                 "W: {} pages, {:.4f} GB, {:.4f} GB/s",
-                 total_pages_written,
-                 static_cast<double>(total_bytes_written) / DB::GB,
-                 static_cast<double>(total_bytes_written) / DB::GB / seconds_run));
+             "W: {} pages, {:.4f} GB, {:.4f} GB/s",
+             total_pages_written,
+             static_cast<double>(total_bytes_written) / DB::GB,
+             static_cast<double>(total_bytes_written) / DB::GB / seconds_run);
     LOG_INFO(options.logger,
-             fmt::format(
-                 "R: {} pages, {:.4f} GB, {:.4f} GB/s",
-                 total_pages_read,
-                 static_cast<double>(total_bytes_read) / DB::GB,
-                 static_cast<double>(total_bytes_read) / DB::GB / seconds_run));
+             "R: {} pages, {:.4f} GB, {:.4f} GB/s",
+             total_pages_read,
+             static_cast<double>(total_bytes_read) / DB::GB,
+             static_cast<double>(total_bytes_read) / DB::GB / seconds_run);
 
     if (options.status_interval != 0)
     {
@@ -67,7 +64,7 @@ void StressWorkload::onDumpResult()
 
 void StressWorkload::initPageStorage(DB::PageStorageConfig & config, String path_prefix)
 {
-    DB::FileProviderPtr file_provider = std::make_shared<DB::FileProvider>(std::make_shared<DB::MockKeyManager>(false), false);
+    auto file_provider = std::make_shared<DB::FileProvider>(std::make_shared<DB::MockKeyManager>(false), false);
 
     if (path_prefix.empty())
     {
@@ -93,32 +90,39 @@ void StressWorkload::initPageStorage(DB::PageStorageConfig & config, String path
     {
         ps = std::make_shared<DB::PS::V3::PageStorageImpl>("stress_test", delegator, config, file_provider);
     }
+    else if (options.running_ps_version == 4)
+    {
+        uni_ps = DB::UniversalPageStorage::create("stress_test", delegator, config, file_provider);
+    }
     else
     {
         throw DB::Exception(fmt::format("Invalid PageStorage version {}",
                                         options.running_ps_version));
     }
 
-    ps->restore();
-
+    size_t num_of_pages = 0;
+    if (ps)
     {
-        size_t num_of_pages = 0;
-        ps->traverse([&num_of_pages](const DB::Page & page) {
-            (void)page;
+        ps->restore();
+        ps->traverse([&num_of_pages](const DB::Page &) {
             num_of_pages++;
         });
-        LOG_INFO(StressEnv::logger, fmt::format("Recover {} pages.", num_of_pages));
     }
+    else
+    {
+        uni_ps->restore();
+    }
+    LOG_INFO(StressEnv::logger, "Restore {} pages from disk", num_of_pages);
 }
 
 void StressWorkload::startBackgroundTimer()
 {
     // A background thread that do GC
-    gc = std::make_shared<PSGc>(ps);
+    gc = std::make_shared<PSGc>(ps, uni_ps);
     gc->start();
 
     // A background thread that scan all pages
-    scanner = std::make_shared<PSScanner>(ps);
+    scanner = std::make_shared<PSScanner>(ps, uni_ps);
     scanner->start();
 
     if (options.status_interval > 0)
@@ -143,8 +147,8 @@ void StressWorkloadManger::runWorkload()
         String name;
         WorkloadCreator func;
         std::tie(name, func) = get(NORMAL_WORKLOAD);
-        auto workload = std::shared_ptr<StressWorkload>(func(options));
-        LOG_INFO(StressEnv::logger, fmt::format("Start Running {} , {}", name, workload->desc()));
+        auto workload = func(options);
+        LOG_INFO(StressEnv::logger, "Start running workload {}, {}", name, workload->desc());
         workload->run();
         if (!options.just_init_pages)
         {
@@ -164,11 +168,11 @@ void StressWorkloadManger::runWorkload()
             auto & name = it.second.first;
             auto & creator = it.second.second;
             auto workload = creator(options);
-            LOG_INFO(StressEnv::logger, fmt::format("Start Running {} , {}", name, workload->desc()));
+            LOG_INFO(StressEnv::logger, "Start Running {}, {}", name, workload->desc());
             workload->run();
             if (options.verify && !workload->verify())
             {
-                LOG_WARNING(StressEnv::logger, fmt::format("work load : {} failed.", name));
+                LOG_WARNING(StressEnv::logger, "work load: {} failed.", name);
                 workload->onFailed();
                 break;
             }

@@ -18,6 +18,8 @@
 #include <Storages/Page/workload/PSBackground.h>
 #include <fmt/format.h>
 
+#include "Storages/Page/Snapshot.h"
+
 
 namespace DB::PS::tests
 {
@@ -54,7 +56,10 @@ void PSGc::doGcOnce()
         auto tracker = MemoryTracker::create();
         tracker->setDescription("(Stress Test GC)");
         current_memory_tracker = tracker.get();
-        ps->gc();
+        if (ps)
+            ps->gc();
+        else
+            uni_ps->gc();
         current_memory_tracker = nullptr;
     }
     catch (...)
@@ -76,7 +81,11 @@ void PSScanner::onTime(Poco::Timer & /*timer*/)
     try
     {
         LOG_FMT_INFO(StressEnv::logger, "Scanner start");
-        auto stat = ps->getSnapshotsStat();
+        SnapshotsStatistics stat;
+        if (ps)
+            stat = ps->getSnapshotsStat();
+        else
+            stat = uni_ps->getSnapshotsStat();
         LOG_FMT_INFO(
             StressEnv::logger,
             "Scanner get {} snapshots, longest lifetime: {:.3f}s longest from thread: {}, tracing_id: {}",

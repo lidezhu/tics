@@ -97,12 +97,14 @@ using PSMetricsDumperPtr = std::shared_ptr<PSMetricsDumper>;
 class PSGc
 {
     PSPtr ps;
+    UniPSPtr uni_ps;
 
 public:
-    explicit PSGc(const PSPtr & ps_)
+    explicit PSGc(const PSPtr & ps_, const UniPSPtr & uni_ps_)
         : ps(ps_)
+        , uni_ps(uni_ps_)
     {
-        assert(ps != nullptr);
+        assert(ps != nullptr || uni_ps != nullptr);
         gc_timer.setStartInterval(1000);
         gc_timer.setPeriodicInterval(30 * 1000);
     }
@@ -127,12 +129,14 @@ using PSGcPtr = std::shared_ptr<PSGc>;
 class PSScanner
 {
     PSPtr ps;
+    UniPSPtr uni_ps;
 
 public:
-    explicit PSScanner(const PSPtr & ps_)
+    explicit PSScanner(const PSPtr & ps_, const UniPSPtr & uni_ps_)
         : ps(ps_)
+        , uni_ps(uni_ps_)
     {
-        assert(ps != nullptr);
+        assert(ps != nullptr || uni_ps != nullptr);
 
         scanner_timer.setStartInterval(1000);
         scanner_timer.setPeriodicInterval(30 * 1000);
