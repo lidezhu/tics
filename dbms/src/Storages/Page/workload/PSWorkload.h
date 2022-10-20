@@ -75,7 +75,7 @@ protected:
         writers.clear();
         for (size_t i = 0; i < nums_writers; ++i)
         {
-            auto writer = std::make_shared<T>(ps, i);
+            auto writer = std::make_shared<T>(ps, uni_ps, i);
             if (writer_configure)
             {
                 writer_configure(writer);
@@ -91,7 +91,7 @@ protected:
         readers.clear();
         for (size_t i = 0; i < nums_readers; ++i)
         {
-            auto reader = std::make_shared<T>(ps, i);
+            auto reader = std::make_shared<T>(ps, uni_ps, i);
             if (reader_configure)
             {
                 reader_configure(reader);
@@ -105,8 +105,10 @@ protected:
     StressEnv options;
     Poco::ThreadPool pool;
 
-    PSPtr ps;
     DB::PSDiskDelegatorPtr delegator;
+
+    PSPtr ps;
+    UniPSPtr uni_ps;
 
     std::list<std::shared_ptr<PSRunnable>> writers;
     std::list<std::shared_ptr<PSRunnable>> readers;

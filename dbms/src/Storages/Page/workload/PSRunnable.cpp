@@ -18,14 +18,25 @@
 #include <IO/ReadBufferFromMemory.h>
 #include <Poco/File.h>
 #include <Poco/Logger.h>
+#include <Storages/Page/Snapshot.h>
+#include <Storages/Page/UniversalWriteBatch.h>
+#include <Storages/Page/universal/UniversalPageStorage.h>
 #include <Storages/Page/workload/PSRunnable.h>
+#include <Storages/Page/workload/PSStressEnv.h>
 #include <TestUtils/MockDiskDelegator.h>
 #include <fmt/format.h>
+#include <google/protobuf/stubs/common.h>
 
 #include <random>
 
+#include "Storages/Page/PageDefines.h"
+#include "Storages/Page/UniversalPage.h"
+
 namespace DB::PS::tests
 {
+
+using UniReader = KVStoreReader;
+
 void PSRunnable::run()
 try
 {
@@ -56,6 +67,8 @@ size_t PSRunnable::getPagesUsed() const
     return pages_used;
 }
 
+/// PSWriter ///
+
 size_t PSWriter::approx_page_mb = 2;
 void PSWriter::setApproxPageSize(size_t size_mb)
 {
@@ -72,10 +85,6 @@ DB::ReadBufferPtr PSWriter::genRandomData(const DB::PageId pageId, DB::MemHolder
 
     const size_t buff_sz = approx_page_mb * DB::MB + dist(size_gen);
     char * buff = static_cast<char *>(malloc(buff_sz)); // NOLINT
-    if (buff == nullptr)
-    {
-        throw DB::Exception("Alloc fix memory failed.", DB::ErrorCodes::LOGICAL_ERROR);
-    }
 
     const char buff_ch = pageId % 0xFF;
     memset(buff, buff_ch, buff_sz);
@@ -90,32 +99,37 @@ void PSWriter::updatedRandomData()
     size_t memory_size = approx_page_mb * DB::MB * 2;
     if (memory == nullptr)
     {
-        memory = static_cast<char *>(malloc(memory_size)); // NOLINT
-        if (memory == nullptr)
-        {
-            throw DB::Exception("Alloc fix memory failed.", DB::ErrorCodes::LOGICAL_ERROR);
-        }
+        memory.reset(new char[memory_size]);
         for (size_t i = 0; i < memory_size; i++)
         {
-            memset(memory + i, i % 0xFF, sizeof(char));
+            memory[i] = i % 0xFF;
         }
     }
 
     std::uniform_int_distribution<> dist(0, memory_size / 2 - 1);
     size_t gen_size = dist(gen);
-    buff_ptr = std::make_shared<DB::ReadBufferFromMemory>(memory + gen_size, memory_size - gen_size);
+    buff_ptr = std::make_shared<DB::ReadBufferFromMemory>(memory.get() + gen_size, memory_size - gen_size);
 }
 
-void PSWriter::fillAllPages(const PSPtr & ps)
+void PSWriter::fillAllPages(const PSPtr & ps, const UniPSPtr & uni_ps)
 {
     for (DB::PageId page_id = 0; page_id <= MAX_PAGE_ID_DEFAULT; ++page_id)
     {
         DB::MemHolder holder;
         DB::ReadBufferPtr buff = genRandomData(page_id, holder);
 
-        DB::WriteBatch wb{DB::TEST_NAMESPACE_ID};
-        wb.putPage(page_id, 0, buff, buff->buffer().size());
-        ps->write(std::move(wb));
+        if (ps)
+        {
+            DB::WriteBatch wb{DB::TEST_NAMESPACE_ID};
+            wb.putPage(page_id, 0, buff, buff->buffer().size());
+            ps->write(std::move(wb));
+        }
+        else
+        {
+            DB::UniversalWriteBatch wb;
+            wb.putPage(UniReader::toFullPageId(page_id), 0, buff, buff->buffer().size());
+            uni_ps->write(std::move(wb));
+        }
         if (page_id % 100 == 0)
             LOG_FMT_INFO(StressEnv::logger, "writer wrote page {}", page_id);
     }
@@ -126,9 +140,18 @@ bool PSWriter::runImpl()
     const DB::PageId page_id = genRandomPageId();
     updatedRandomData();
 
-    DB::WriteBatch wb{DB::TEST_NAMESPACE_ID};
-    wb.putPage(page_id, 0, buff_ptr, buff_ptr->buffer().size());
-    ps->write(std::move(wb));
+    if (ps)
+    {
+        DB::WriteBatch wb{DB::TEST_NAMESPACE_ID};
+        wb.putPage(page_id, 0, buff_ptr, buff_ptr->buffer().size());
+        ps->write(std::move(wb));
+    }
+    else
+    {
+        DB::UniversalWriteBatch wb;
+        wb.putPage(UniReader::toFullPageId(page_id), 0, buff_ptr, buff_ptr->buffer().size());
+        uni_ps->write(std::move(wb));
+    }
     ++pages_used;
     bytes_used += buff_ptr->buffer().size();
     return true;
@@ -140,6 +163,8 @@ DB::PageId PSWriter::genRandomPageId()
     return static_cast<DB::PageId>(std::round(distribution(gen))) % max_page_id;
 }
 
+/// PSCommonWriter ///
+
 void PSCommonWriter::updatedRandomData()
 {
     // Calculate the fixed memory size
@@ -149,15 +174,10 @@ void PSCommonWriter::updatedRandomData()
 
     if (memory == nullptr)
     {
-        memory = static_cast<char *>(malloc(memory_size)); // NOLINT
-        if (memory == nullptr)
-        {
-            throw DB::Exception("Alloc fix memory failed.", DB::ErrorCodes::LOGICAL_ERROR);
-        }
-
+        memory.reset(new char[memory_size]);
         for (size_t i = 0; i < memory_size; i++)
         {
-            memset(memory + i, i % 0xFF, sizeof(char));
+            memory[i] = i % 0xFF;
         }
     }
 
@@ -166,7 +186,7 @@ void PSCommonWriter::updatedRandomData()
     size_t gen_size = genBufferSize();
     for (size_t i = 0; i < batch_buffer_nums; ++i)
     {
-        buff_ptrs.emplace_back(std::make_shared<DB::ReadBufferFromMemory>(memory + i * single_buff_size, gen_size));
+        buff_ptrs.emplace_back(std::make_shared<DB::ReadBufferFromMemory>(memory.get() + i * single_buff_size, gen_size));
     }
 }
 
@@ -176,17 +196,31 @@ bool PSCommonWriter::runImpl()
 {
     const DB::PageId page_id = genRandomPageId();
 
-    DB::WriteBatch wb{DB::TEST_NAMESPACE_ID};
     updatedRandomData();
-
-    for (auto & buffptr : buff_ptrs)
+    if (ps)
     {
-        wb.putPage(page_id, 0, buffptr, buffptr->buffer().size());
-        ++pages_used;
-        bytes_used += buffptr->buffer().size();
-    }
+        DB::WriteBatch wb{DB::TEST_NAMESPACE_ID};
+        for (auto & buffptr : buff_ptrs)
+        {
+            wb.putPage(page_id, 0, buffptr, buffptr->buffer().size());
+            ++pages_used;
+            bytes_used += buffptr->buffer().size();
+        }
 
-    ps->write(std::move(wb));
+        ps->write(std::move(wb));
+    }
+    else
+    {
+        DB::UniversalWriteBatch wb;
+        for (auto & buffptr : buff_ptrs)
+        {
+            wb.putPage(UniReader::toFullPageId(page_id), 0, buffptr, buffptr->buffer().size());
+            ++pages_used;
+            bytes_used += buffptr->buffer().size();
+        }
+
+        uni_ps->write(std::move(wb));
+    }
     return (batch_buffer_limit == 0 || bytes_used < batch_buffer_limit);
 }
 
@@ -241,6 +275,7 @@ size_t PSCommonWriter::genBufferSize()
     return batch_buffer_size;
 }
 
+/// PSReader ///
 
 DB::PageIds PSReader::genRandomPageIds()
 {
@@ -257,17 +292,30 @@ bool PSReader::runImpl()
 {
     DB::PageIds page_ids = genRandomPageIds();
 
-    DB::PageHandler handler = [&](DB::PageId page_id, const DB::Page & page) {
-        (void)page_id;
-        // use `sleep` to mock heavy read
-        if (heavy_read_delay_ms > 0)
-        {
-            usleep(heavy_read_delay_ms * 1000);
-        }
-        ++pages_used;
-        bytes_used += page.data.size();
-    };
-    ps->read(DB::TEST_NAMESPACE_ID, page_ids, handler);
+    if (ps)
+    {
+        DB::PageHandler handler = [&](DB::PageId, const DB::Page & page) {
+            // use `sleep` to mock heavy read
+            if (heavy_read_delay_ms > 0)
+            {
+                usleep(heavy_read_delay_ms * 1000);
+            }
+            ++pages_used;
+            bytes_used += page.data.size();
+        };
+        ps->read(DB::TEST_NAMESPACE_ID, page_ids, handler);
+    }
+    else
+    {
+        auto handler = [&](const PageId &, const UniversalPage & page) {
+            if (heavy_read_delay_ms > 0)
+                usleep(heavy_read_delay_ms * 1000);
+            ++pages_used;
+            bytes_used += page.data.size();
+        };
+        UniReader reader(*uni_ps);
+        reader.read(page_ids, handler);
+    }
     return true;
 }
 
@@ -290,6 +338,8 @@ void PSReader::setReadPageNums(size_t page_read_once_)
 {
     page_read_once = page_read_once_;
 }
+
+/// PSWindowWriter ///
 
 void PSWindowWriter::setWindowSize(size_t window_size_)
 {
@@ -390,9 +440,16 @@ DB::PageIds PSWindowReader::genRandomPageIds()
     return page_ids;
 }
 
+/// PSSnapshotReader ///
+
 bool PSSnapshotReader::runImpl()
 {
-    snapshots.emplace_back(ps->getSnapshot(""));
+    PageStorageSnapshotPtr snap;
+    if (ps)
+        snap = ps->getSnapshot("");
+    else
+        snap = uni_ps->getSnapshot("");
+    snapshots.emplace_back(snap);
     usleep(snapshot_get_interval_ms * 1000);
     return true;
 }
@@ -401,6 +458,8 @@ void PSSnapshotReader::setSnapshotGetIntervalMs(size_t snapshot_get_interval_ms_
 {
     snapshot_get_interval_ms = snapshot_get_interval_ms_;
 }
+
+/// PSIncreaseWriter ///
 
 bool PSIncreaseWriter::runImpl()
 {

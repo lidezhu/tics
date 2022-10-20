@@ -58,7 +58,7 @@ private:
         stress_time = std::make_shared<StressTimeout>(60);
         stress_time->start();
 
-        scanner = std::make_shared<PSScanner>(ps);
+        scanner = std::make_shared<PSScanner>(ps, uni_ps);
         scanner->start();
 
         // 90-100 snapshots will be generated.
@@ -79,7 +79,7 @@ private:
             stop_watch.stop();
         }
 
-        gc = std::make_shared<PSGc>(ps);
+        gc = std::make_shared<PSGc>(ps, uni_ps);
         // Normal GC
         gc->doGcOnce();
 

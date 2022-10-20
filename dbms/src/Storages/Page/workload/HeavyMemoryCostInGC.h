@@ -66,7 +66,7 @@ public:
         pool.joinAll();
         stop_watch.stop();
 
-        gc = std::make_shared<PSGc>(ps);
+        gc = std::make_shared<PSGc>(ps, uni_ps);
         gc->doGcOnce();
     }
 
@@ -78,7 +78,9 @@ public:
     void onFailed() override
     {
         LOG_WARNING(StressEnv::logger,
-                    fmt::format("Memory Peak is {} , it should not bigger than {} ", metrics_dumper->getMemoryPeak(), 5 * 1024 * 1024));
+                    "Memory Peak is {} , it should not bigger than {} ",
+                    metrics_dumper->getMemoryPeak(),
+                    5 * 1024 * 1024);
     }
 };
 } // namespace DB::PS::tests
