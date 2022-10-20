@@ -16,18 +16,15 @@
 
 #include <Storages/Page/PageDefines.h>
 #include <Storages/Page/PageStorage.h>
+#include <Storages/Page/universal/UniversalPageStorage.h>
 #include <fmt/format.h>
 
 #include <atomic>
 
-namespace Poco
-{
-class Logger;
-}
-
 namespace DB::PS::tests
 {
 using PSPtr = std::shared_ptr<DB::PageStorage>;
+using UniPSPtr = std::shared_ptr<DB::UniversalPageStorage>;
 
 enum StressEnvStat
 {
@@ -72,7 +69,7 @@ public:
 
 struct StressEnv
 {
-    static Poco::Logger * logger;
+    static LoggerPtr logger;
 
     size_t num_writers = 1;
     size_t num_readers = 4;
@@ -99,7 +96,7 @@ struct StressEnv
             ", clean_before_run: {}, timeout_s: {}, read_delay_ms: {}, num_writer_slots: {}"
             ", avg_page_size_mb: {}, paths: [{}], failpoints: [{}]"
             ", status_interval: {}, situation_mask: {}, verify: {}"
-            ", running_pagestorage_version : {}."
+            ", running_pagestorage_version: {}"
             "}}",
             num_writers,
             num_readers,
