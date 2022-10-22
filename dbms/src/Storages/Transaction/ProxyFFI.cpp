@@ -14,6 +14,7 @@
 
 #include <Common/CurrentMetrics.h>
 #include <Common/nocopyable.h>
+#include <Common/RedactHelpers.h>
 #include <Interpreters/Context.h>
 #include <Storages/DeltaMerge/ExternalDTFileInfo.h>
 #include <Storages/Page/UniversalWriteBatch.h>
@@ -167,8 +168,12 @@ RawCppPtr CreateWriteBatch()
 void WriteBatchPutPage(RawVoidPtr ptr, BaseBuffView page_id, BaseBuffView value)
 {
     auto * wb = reinterpret_cast<UniversalWriteBatch *>(ptr);
-    ReadBufferPtr buff = std::make_shared<ReadBufferFromMemory>(value.data, value.len);
-    wb->putPage(UniversalPageId(page_id.data, page_id.len), 0, buff, value.len);
+    MemoryWriteBuffer buf(0, value.len);
+    buf.write(value.data, value.len);
+    auto data_size = buf.count();
+    assert(data_size == value.len);
+    wb->putPage(UniversalPageId(page_id.data, page_id.len), 0, buf.tryGetReadBuffer(), data_size);
+    std::cout << "page " << Redact::keyToHexString(page_id.data, page_id.len) << " value " << Redact::keyToHexString(value.data, value.len) << std::endl;
 }
 
 void WriteBatchDelPage(RawVoidPtr ptr, BaseBuffView page_id)
