@@ -14,6 +14,7 @@
 
 #include <Common/Exception.h>
 #include <Common/Logger.h>
+#include <Common/SyncPoint/SyncPoint.h>
 #include <Encryption/FileProvider.h>
 #include <Poco/File.h>
 #include <Poco/Logger.h>
@@ -82,18 +83,24 @@ void WALStore::apply(String && serialized_edit, const WriteLimiterPtr & write_li
 
     {
         std::lock_guard lock(log_file_mutex);
-        // Roll to a new log file
-        // TODO: Make it configurable
         if (log_file == nullptr || log_file->writtenBytes() > config.roll_size)
         {
-            auto log_num = last_log_num++;
-            auto [new_log_file, filename] = createLogWriter({log_num, 0}, false);
-            (void)filename;
-            log_file.swap(new_log_file);
+            // Roll to a new log file
+            rollToNewLogWriter(lock);
         }
 
         log_file->addRecord(payload, serialized_edit.size(), write_limiter);
     }
+}
+
+Format::LogNumberType WALStore::rollToNewLogWriter(const std::lock_guard<std::mutex> &)
+{
+    // Roll to a new log file
+    auto log_num = last_log_num++;
+    auto [new_log_file, filename] = createLogWriter({log_num, 0}, false);
+    UNUSED(filename);
+    log_file.swap(new_log_file);
+    return log_num;
 }
 
 std::tuple<std::unique_ptr<LogWriter>, LogFilename> WALStore::createLogWriter(
@@ -135,9 +142,7 @@ std::tuple<std::unique_ptr<LogWriter>, LogFilename> WALStore::createLogWriter(
         new_log_lvl.first,
         /*recycle*/ true,
         /*manual_flush*/ manual_flush);
-    return {
-        std::move(log_writer),
-        log_filename};
+    return {std::move(log_writer), log_filename};
 }
 
 WALStore::FilesSnapshot WALStore::getFilesSnapshot() const
@@ -185,7 +190,7 @@ bool WALStore::saveSnapshot(
     if (files_snap.persisted_log_files.empty())
         return false;
 
-    LOG_FMT_INFO(logger, "Saving directory snapshot");
+    LOG_FMT_INFO(logger, "Saving directory snapshot [num_records={}]", num_records);
 
     // Use {largest_log_num, 1} to save the `edit`
     const auto log_num = files_snap.persisted_log_files.rbegin()->log_num;
@@ -226,7 +231,7 @@ bool WALStore::saveSnapshot(
             files_snap.persisted_log_files.begin(),
             files_snap.persisted_log_files.end(),
             [](const auto & arg, FmtBuffer & fb) {
-                fb.fmtAppend("{}", arg.filename(arg.stage));
+                fb.append(arg.filename(arg.stage));
             },
             ", ");
         fmt_buf.fmtAppend("] [num_records={}] [file={}] [size={}].",
