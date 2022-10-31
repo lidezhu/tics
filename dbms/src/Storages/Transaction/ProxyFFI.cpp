@@ -162,6 +162,7 @@ uint8_t TryFlushData(EngineStoreServerWrap * server, uint64_t region_id, uint8_t
 
 RawCppPtr CreateWriteBatch()
 {
+    LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "create write batch");
     return GenRawCppPtr(new UniversalWriteBatch(), RawCppPtrTypeImpl::WriteBatch);
 }
 
@@ -592,6 +593,7 @@ void GcRawCppPtr(RawVoidPtr ptr, RawCppPtrType type)
             delete reinterpret_cast<AsyncNotifier *>(ptr);
             break;
         case RawCppPtrTypeImpl::WriteBatch:
+            LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "destroy write batch");
             delete reinterpret_cast<UniversalWriteBatch *>(ptr);
             break;
         case RawCppPtrTypeImpl::UniversalPage:
