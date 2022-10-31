@@ -66,6 +66,8 @@
 #include <fiu.h>
 #include <fmt/core.h>
 
+
+
 #include <boost/functional/hash/hash.hpp>
 #include <pcg_random.hpp>
 #include <set>
@@ -106,6 +108,23 @@ namespace FailPoints
 {
 extern const char force_context_path[];
 } // namespace FailPoints
+
+struct UniversalPageStorageWrapper
+{
+    UniversalPageStoragePtr uni_page_storage;
+    BackgroundProcessingPool::TaskHandle gc_handle;
+
+    void restore(Context & global_context)
+    {
+        uni_page_storage->restore();
+        gc_handle = global_context.getBackgroundPool().addTask(
+            [this, global_context] {
+                return this->uni_page_storage->gc();
+            },
+            false);
+    }
+};
+using UniversalPageStorageWrapperPtr = std::shared_ptr<UniversalPageStorageWrapper>;
 
 
 /** Set of known objects (environment), that could be used in query.
@@ -160,7 +179,7 @@ struct ContextShared
     IORateLimiter io_rate_limiter;
     PageStorageRunMode storage_run_mode = PageStorageRunMode::ONLY_V3;
     DM::GlobalStoragePoolPtr global_storage_pool;
-    UniversalPageStoragePtr uni_page_storage;
+    UniversalPageStorageWrapperPtr uni_page_storage_wrapper;
     /// Named sessions. The user could specify session identifier to reuse settings and temporary tables in subsequent requests.
 
     class SessionKeyHash
@@ -1620,18 +1639,19 @@ DM::GlobalStoragePoolPtr Context::getGlobalStoragePool() const
 void Context::initializeGlobalUniversalPageStorage(const PathPool & path_pool, const FileProviderPtr & file_provider)
 {
     auto lock = getLock();
-    if (shared->uni_page_storage)
+    if (shared->uni_page_storage_wrapper)
         throw Exception("UniversalPageStorage has already been initialized.", ErrorCodes::LOGICAL_ERROR);
 
-    shared->uni_page_storage = UniversalPageStorage::create("global", path_pool.getPSDiskDelegatorGlobalMulti("global"), {}, file_provider);
-    shared->uni_page_storage->restore();
+    shared->uni_page_storage_wrapper = std::make_shared<UniversalPageStorageWrapper>();
+    shared->uni_page_storage_wrapper->uni_page_storage = UniversalPageStorage::create("global", path_pool.getPSDiskDelegatorGlobalMulti("global"), {}, file_provider);
+    shared->uni_page_storage_wrapper->restore(*this);
     LOG_INFO(shared->log, "initialized GlobalUniversalPageStorage");
 }
 
 UniversalPageStoragePtr Context::getGlobalUniversalPageStorage() const
 {
     auto lock = getLock();
-    return shared->uni_page_storage;
+    return shared->uni_page_storage_wrapper->uni_page_storage;
 }
 
 UInt16 Context::getTCPPort() const

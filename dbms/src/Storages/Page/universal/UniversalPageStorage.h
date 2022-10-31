@@ -72,6 +72,41 @@ public:
     {
     }
 
+    enum class GCStageType
+    {
+        Unknown,
+        OnlyInMem,
+        FullGCNothingMoved,
+        FullGC,
+    };
+
+    struct GCTimeStatistics
+    {
+        GCStageType stage = GCStageType::Unknown;
+        bool executeNextImmediately() const { return stage == GCStageType::FullGC; };
+
+        UInt64 total_cost_ms = 0;
+
+        UInt64 dump_snapshots_ms = 0;
+        UInt64 gc_in_mem_entries_ms = 0;
+        UInt64 blobstore_remove_entries_ms = 0;
+        UInt64 blobstore_get_gc_stats_ms = 0;
+        // Full GC
+        UInt64 full_gc_get_entries_ms = 0;
+        UInt64 full_gc_blobstore_copy_ms = 0;
+        UInt64 full_gc_apply_ms = 0;
+
+        // GC external page
+        UInt64 clean_external_page_ms = 0;
+        UInt64 num_external_callbacks = 0;
+        // ms is usually too big for these operation, store by ns (10^-9)
+        UInt64 external_page_scan_ns = 0;
+        UInt64 external_page_get_alive_ns = 0;
+        UInt64 external_page_remove_ns = 0;
+
+        String toLogging() const;
+    };
+
     ~UniversalPageStorage() = default;
 
     void restore();
@@ -118,9 +153,19 @@ public:
     // We may skip the GC to reduce useless reading by default.
     bool gc(bool not_skip = false, const WriteLimiterPtr & write_limiter = nullptr, const ReadLimiterPtr & read_limiter = nullptr)
     {
-        UNUSED(not_skip, write_limiter, read_limiter);
-        return false;
+        // If another thread is running gc, just return;
+        bool v = false;
+        if (!gc_is_running.compare_exchange_strong(v, true))
+            return false;
+
+        const GCTimeStatistics statistics = doGC(write_limiter, read_limiter);
+        assert(statistics.stage != GCStageType::Unknown); // `doGC` must set the stage
+        LOG_DEBUG(log, statistics.toLogging());
+
+        return statistics.executeNextImmediately();
     }
+
+    GCTimeStatistics doGC(const WriteLimiterPtr & write_limiter, const ReadLimiterPtr & read_limiter);
 
     // Register and unregister external pages GC callbacks
     // Note that user must ensure that it is safe to call `scanner` and `remover` even after unregister.
@@ -134,6 +179,8 @@ public:
 
     PS::V3::universal::PageDirectoryPtr page_directory;
     PS::V3::universal::BlobStorePtr blob_store;
+
+    std::atomic<bool> gc_is_running = false;
 };
 
 class KVStoreReader final
