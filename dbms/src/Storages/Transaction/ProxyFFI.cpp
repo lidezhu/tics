@@ -162,7 +162,7 @@ uint8_t TryFlushData(EngineStoreServerWrap * server, uint64_t region_id, uint8_t
 
 RawCppPtr CreateWriteBatch()
 {
-    LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "create write batch");
+//    LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "create write batch");
     return GenRawCppPtr(new UniversalWriteBatch(), RawCppPtrTypeImpl::WriteBatch);
 }
 
@@ -236,6 +236,7 @@ PageWithView HandleReadPage(const EngineStoreServerWrap * server, BaseBuffView p
         auto * page = new UniversalPage(reader.read(id));
         if (page->isValid())
         {
+//            LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "handle read page");
             return PageWithView{.inner = GenRawCppPtr(page, RawCppPtrTypeImpl::UniversalPage), .view = BaseBuffView{page->data.begin(), page->data.size()}};
         }
         else
@@ -280,6 +281,7 @@ PageWithViewVec HandleScanPage(const EngineStoreServerWrap * server, BaseBuffVie
                 memcpy(reinterpret_cast<char *>(target) + sizeof(RawCppPtr), &temp, sizeof(BaseBuffView));
             }
         }
+//        LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "handle scan page {}", pages.size());
         return PageWithViewVec{.inner = reinterpret_cast<PageWithView *>(data), .len = pages.size() };
     }
     catch (...)
@@ -593,7 +595,7 @@ void GcRawCppPtr(RawVoidPtr ptr, RawCppPtrType type)
             delete reinterpret_cast<AsyncNotifier *>(ptr);
             break;
         case RawCppPtrTypeImpl::WriteBatch:
-            LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "destroy write batch");
+//            LOG_DEBUG(&Poco::Logger::get("ProxyFFIDebug"), "destroy write batch");
             delete reinterpret_cast<UniversalWriteBatch *>(ptr);
             break;
         case RawCppPtrTypeImpl::UniversalPage:
