@@ -69,6 +69,7 @@ public:
         , delegator(std::move(delegator_))
         , config(config_)
         , file_provider(file_provider_)
+        , log(Logger::get("UniversalPageStorage", name))
     {
     }
 
@@ -153,6 +154,7 @@ public:
     // We may skip the GC to reduce useless reading by default.
     bool gc(bool not_skip = false, const WriteLimiterPtr & write_limiter = nullptr, const ReadLimiterPtr & read_limiter = nullptr)
     {
+        std::ignore = not_skip;
         // If another thread is running gc, just return;
         bool v = false;
         if (!gc_is_running.compare_exchange_strong(v, true))
@@ -181,6 +183,8 @@ public:
     PS::V3::universal::BlobStorePtr blob_store;
 
     std::atomic<bool> gc_is_running = false;
+
+    LoggerPtr log;
 };
 
 class KVStoreReader final
