@@ -14,6 +14,7 @@
 
 #include <Common/Checksum.h>
 #include <Common/CurrentMetrics.h>
+#include <Common/Stopwatch.h>
 #include <Common/Exception.h>
 #include <Common/FailPoint.h>
 #include <Common/Logger.h>
@@ -245,6 +246,7 @@ template <typename Trait>
 typename Trait::PageEntriesEdit
 BlobStore<Trait>::write(typename Trait::WriteBatch & wb, const WriteLimiterPtr & write_limiter)
 {
+    Stopwatch watch;
     ProfileEvents::increment(ProfileEvents::PSMWritePages, wb.putWriteCount());
 
     const size_t all_page_data_size = wb.getTotalDataSize();
@@ -390,10 +392,15 @@ BlobStore<Trait>::write(typename Trait::WriteBatch & wb, const WriteLimiterPtr &
             ErrorCodes::LOGICAL_ERROR);
     }
 
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_edit).Observe(watch.elapsedSeconds());
+    watch.restart();
     try
     {
         auto blob_file = getBlobFile(blob_id);
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_get_stat).Observe(watch.elapsedSeconds());
+        watch.restart();
         blob_file->write(buffer, offset_in_file, all_page_data_size, write_limiter);
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_blob_write).Observe(watch.elapsedSeconds());
     }
     catch (DB::Exception & e)
     {
