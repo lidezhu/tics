@@ -255,8 +255,10 @@ protected:
 
         if (it->second == size)
         {
+            bool is_champion =  it->first <= hint_biggest_offset && hint_biggest_offset < it->first + it->second;
+            assert(hint_biggest_offset + hint_biggest_cap <= it->first + it->second);
             // It is not champion, just return
-            if (it->first != hint_biggest_offset)
+            if (!is_champion)
             {
                 free_map.erase(it);
                 max_cap = hint_biggest_cap;
