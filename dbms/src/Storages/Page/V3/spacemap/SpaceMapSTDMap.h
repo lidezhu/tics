@@ -253,10 +253,14 @@ protected:
         // Update return start
         offset = it->first;
 
+        bool is_champion =  it->first <= hint_biggest_offset && hint_biggest_offset < it->first + it->second;
+        if (is_champion)
+        {
+            // TODO: change to exception
+            assert(hint_biggest_offset + hint_biggest_cap <= it->first + it->second);
+        }
         if (it->second == size)
         {
-            bool is_champion =  it->first <= hint_biggest_offset && hint_biggest_offset < it->first + it->second;
-            assert(hint_biggest_offset + hint_biggest_cap <= it->first + it->second);
             // It is not champion, just return
             if (!is_champion)
             {
@@ -279,7 +283,7 @@ protected:
             it = free_map.insert(/*hint=*/it, {k, v}); // Use the `it` after erased as a hint, should be good for performance
 
             // It is not champion, just return
-            if (k - size != hint_biggest_offset)
+            if (!is_champion)
             {
                 max_cap = hint_biggest_cap;
                 return std::make_tuple(offset, max_cap, last_offset == offset);
