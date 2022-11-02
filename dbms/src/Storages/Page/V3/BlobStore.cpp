@@ -310,6 +310,8 @@ BlobStore<Trait>::write(typename Trait::WriteBatch & wb, const WriteLimiterPtr &
     size_t actually_allocated_size = all_page_data_size + replenish_size;
 
     auto [blob_id, offset_in_file] = getPosFromStats(actually_allocated_size);
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_get_stat).Observe(watch.elapsedSeconds());
+    watch.restart();
 
     size_t offset_in_allocated = 0;
 
@@ -397,8 +399,6 @@ BlobStore<Trait>::write(typename Trait::WriteBatch & wb, const WriteLimiterPtr &
     try
     {
         auto blob_file = getBlobFile(blob_id);
-        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_get_stat).Observe(watch.elapsedSeconds());
-        watch.restart();
         blob_file->write(buffer, offset_in_file, all_page_data_size, write_limiter);
         GET_METRIC(tiflash_storage_page_write_duration_seconds, type_blob_write).Observe(watch.elapsedSeconds());
     }
