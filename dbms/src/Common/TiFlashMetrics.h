@@ -160,6 +160,13 @@ namespace DB
         F(type_v3, {{"type", "v3"}}, ExpBuckets{0.0005, 2, 20}))                                                                          \
     M(tiflash_storage_page_write_batch_size, "The size of each write batch in bytes", Histogram,                                          \
         F(type_v3, {{"type", "v3"}}, ExpBuckets{4 * 1024, 4, 10}))                                                                        \
+    M(tiflash_storage_page_write_duration_seconds, "The duration of each write batch", Histogram,                                         \
+        F(type_total, {{"type", "total"}}, ExpBuckets{0.0001, 2, 20}),                                                                    \
+        F(type_blob,  {{"type", "blob"}},  ExpBuckets{0.0001, 2, 20}),                                                                    \
+        /* the bucket range for apply in memory is 50us ~ 120s */                                                                         \
+        F(type_latch,  {{"type", "latch"}},   ExpBuckets{0.00005, 1.8, 26}),                                                              \
+        F(type_wal,    {{"type", "wal"}},     ExpBuckets{0.00005, 1.8, 26}),                                                              \
+        F(type_commit, {{"type", "commmit"}}, ExpBuckets{0.00005, 1.8, 26}))                                                              \
     M(tiflash_storage_logical_throughput_bytes, "The logical throughput of read tasks of storage in bytes", Histogram,                    \
         F(type_read, {{"type", "read"}}, EqualWidthBuckets{1 * 1024 * 1024, 60, 50 * 1024 * 1024}))                                       \
     M(tiflash_storage_io_limiter, "Storage I/O limiter metrics", Counter, F(type_fg_read_req_bytes, {"type", "fg_read_req_bytes"}),       \
@@ -237,7 +244,7 @@ namespace DB
 struct ExpBuckets
 {
     const double start;
-    const int base;
+    const double base;
     const size_t size;
     inline operator prometheus::Histogram::BucketBoundaries() const &&
     {

@@ -27,6 +27,8 @@
 #include <Storages/Page/V3/WALStore.h>
 #include <Storages/Page/WriteBatch.h>
 #include <common/logger_useful.h>
+#include <Common/Stopwatch.h>
+#include <Common/TiFlashMetrics.h>
 
 #include <memory>
 #include <mutex>
@@ -1177,10 +1179,13 @@ void PageDirectory<Trait>::applyRefEditRecord(
 template <typename Trait>
 void PageDirectory<Trait>::apply(typename Trait::PageEntriesEdit && edit, const WriteLimiterPtr & write_limiter)
 {
+    Stopwatch watch;
     // Note that we need to make sure increasing `sequence` in order, so it
     // also needs to be protected by `write_lock` throughout the `apply`
     // TODO: It is totally serialized, make it a pipeline
     std::unique_lock write_lock(table_rw_mutex);
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_latch).Observe(watch.elapsedSeconds());
+    watch.restart();
     UInt64 last_sequence = sequence.load();
     PageVersion new_version(last_sequence + 1, 0);
 
@@ -1190,6 +1195,9 @@ void PageDirectory<Trait>::apply(typename Trait::PageEntriesEdit && edit, const 
         r.version = new_version;
     }
     wal->apply(Trait::Serializer::serializeTo(edit), write_limiter);
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wal).Observe(watch.elapsedSeconds());
+    watch.restart();
+    SCOPE_EXIT({ GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(watch.elapsedSeconds()); });
 
     // stage 2, create entry version list for page_id.
     for (const auto & r : edit.getRecords())
