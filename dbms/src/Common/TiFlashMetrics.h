@@ -169,6 +169,7 @@ namespace DB
         F(type_commit, {{"type", "commmit"}}, ExpBuckets{0.00005, 1.8, 26}),                                                             \
         F(type_edit, {{"type", "edit"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
         F(type_get_stat, {{"type", "get_stat"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
+        F(type_get_stat_latch, {{"type", "get_stat_latch"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
         F(type_blob_write, {{"type", "blob_write"}}, ExpBuckets{0.00005, 1.8, 26}))                                                              \
     M(tiflash_storage_logical_throughput_bytes, "The logical throughput of read tasks of storage in bytes", Histogram,                    \
         F(type_read, {{"type", "read"}}, EqualWidthBuckets{1 * 1024 * 1024, 60, 50 * 1024 * 1024}))                                       \
