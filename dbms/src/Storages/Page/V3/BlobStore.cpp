@@ -468,9 +468,15 @@ std::pair<BlobFileId, BlobFileOffset> BlobStore<Trait>::getPosFromStats(size_t s
     BlobStatPtr stat;
 
     auto lock_stat = [size, this, &stat]() {
+        Stopwatch watch_inner;
         auto lock_stats = blob_stats.lock();
         BlobFileId blob_file_id = INVALID_BLOBFILE_ID;
         std::tie(stat, blob_file_id) = blob_stats.chooseStat(size, lock_stats);
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_choose_stat).Observe(watch_inner.elapsedSeconds());
+        watch_inner.restart();
+        SCOPE_EXIT({
+            GET_METRIC(tiflash_storage_page_write_duration_seconds, type_lock_stat).Observe(watch_inner.elapsedSeconds());
+        });
         if (stat == nullptr)
         {
             // No valid stat for putting data with `size`, create a new one

@@ -170,7 +170,9 @@ namespace DB
         F(type_edit, {{"type", "edit"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
         F(type_get_stat, {{"type", "get_stat"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
         F(type_get_stat_latch, {{"type", "get_stat_latch"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
-        F(type_blob_write, {{"type", "blob_write"}}, ExpBuckets{0.00005, 1.8, 26}))                                                              \
+        F(type_blob_write, {{"type", "blob_write"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
+        F(type_choose_stat, {{"type", "choose_stat"}}, ExpBuckets{0.00005, 1.8, 26}),                                                              \
+        F(type_lock_stat, {{"type", "lock_stat"}}, ExpBuckets{0.00005, 1.8, 26}))                                                              \
     M(tiflash_storage_logical_throughput_bytes, "The logical throughput of read tasks of storage in bytes", Histogram,                    \
         F(type_read, {{"type", "read"}}, EqualWidthBuckets{1 * 1024 * 1024, 60, 50 * 1024 * 1024}))                                       \
     M(tiflash_storage_io_limiter, "Storage I/O limiter metrics", Counter, F(type_fg_read_req_bytes, {"type", "fg_read_req_bytes"}),       \
