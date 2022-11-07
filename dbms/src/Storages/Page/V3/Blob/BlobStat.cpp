@@ -167,7 +167,10 @@ BlobStats::BlobStatPtr BlobStats::createStatNotChecking(BlobFileId blob_file_id,
 void BlobStats::eraseStat(const BlobStatPtr && stat, const std::lock_guard<std::mutex> &)
 {
     PageFileIdAndLevel id_lvl{stat->id, 0};
-    stats_map[delegator->getPageFilePath(id_lvl)].remove(stat);
+    auto & stats = stats_map[delegator->getPageFilePath(id_lvl)];
+    auto iter = std::find(stats.begin(), stats.end(), stat);
+    assert(iter != stats.end());
+    stats.erase(iter);
 }
 
 void BlobStats::eraseStat(BlobFileId blob_file_id, const std::lock_guard<std::mutex> & lock)
@@ -201,7 +204,6 @@ void BlobStats::eraseStat(BlobFileId blob_file_id, const std::lock_guard<std::mu
 std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_size, const std::lock_guard<std::mutex> &)
 {
     BlobStatPtr stat_ptr = nullptr;
-    double smallest_valid_rate = 2;
 
     // No stats exist
     if (stats_map.empty())
