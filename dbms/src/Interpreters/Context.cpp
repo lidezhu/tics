@@ -121,8 +121,7 @@ struct UniversalPageStorageWrapper
             [this, global_context] {
                 return this->uni_page_storage->gc();
             },
-            false,
-            1000);
+            false);
     }
 };
 using UniversalPageStorageWrapperPtr = std::shared_ptr<UniversalPageStorageWrapper>;
