@@ -53,6 +53,8 @@ public:
 
     struct BlobStat
     {
+        String parent_path;
+
         const BlobFileId id;
         std::atomic<BlobStatType> type;
 
@@ -168,7 +170,7 @@ public:
 
     BlobStatPtr blobIdToStat(BlobFileId file_id, bool ignore_not_exist = false);
 
-    using StatsMap = std::map<String, std::list<BlobStatPtr>>;
+    using StatsMap = std::map<String, std::vector<BlobStatPtr>>;
     StatsMap getStats() const
     {
         auto guard = lock();
@@ -196,7 +198,8 @@ private:
     BlobFileId roll_id = 1;
     // Index for selecting next path for creating new blobfile
     UInt32 stats_map_path_index = 0;
-    std::map<String, std::list<BlobStatPtr>> stats_map;
+    std::map<String, std::vector<BlobStatPtr>> stats_map;
+    std::map<String, UInt32> stats_map_next_index;
 };
 
 } // namespace DB::PS::V3

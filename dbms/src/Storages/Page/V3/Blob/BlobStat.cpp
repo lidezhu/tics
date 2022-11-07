@@ -157,6 +157,10 @@ BlobStats::BlobStatPtr BlobStats::createStatNotChecking(BlobFileId blob_file_id,
     /// If creating a new BlobFile, we need to register the BlobFile's path to delegator, so it's necessary to call `addPageFileUsedSize` here.
     delegator->addPageFileUsedSize({blob_file_id, 0}, 0, path, true);
     stats_map[path].emplace_back(stat);
+    if (stats_map_next_index.find(path) == stats_map_next_index.end())
+    {
+        stats_map_next_index[path] = 0;
+    }
     return stat;
 }
 
@@ -216,16 +220,16 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
     for (path_iter_idx = 0; path_iter_idx < stats_map.size(); ++path_iter_idx)
     {
         // Try to find a suitable stat under current path (path=`stats_iter->first`)
-        for (const auto & stat : stats_iter->second)
+        for (size_t i = 0; i < stats_iter->second.size(); i++)
         {
+            const auto & stat = (stats_iter->second)[stats_map_next_index[stats_iter->first]];
             auto lock = stat->lock(); // TODO: will it bring performance regression?
-            if (stat->isNormal()
-                && stat->sm_max_caps >= buf_size
-                && stat->sm_valid_rate < smallest_valid_rate)
+            if (stat->isNormal() && stat->sm_max_caps >= buf_size)
             {
-                smallest_valid_rate = stat->sm_valid_rate;
                 stat_ptr = stat;
+                break;
             }
+            stats_map_next_index[stats_iter->first] = (stats_map_next_index[stats_iter->first] + 1) % stats_iter->second.size();
         }
 
         // Already find the available stat under current path.
