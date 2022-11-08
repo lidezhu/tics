@@ -226,13 +226,13 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
         {
             stats_map_next_index[stats_iter->first] = stats_map_next_index[stats_iter->first] % stats_iter->second.size();
             const auto & stat = (stats_iter->second)[stats_map_next_index[stats_iter->first]];
+            stats_map_next_index[stats_iter->first] += 1;
             auto lock = stat->lock(); // TODO: will it bring performance regression?
             if (stat->isNormal() && stat->sm_max_caps >= buf_size)
             {
                 stat_ptr = stat;
                 break;
             }
-            stats_map_next_index[stats_iter->first] += 1;
         }
 
         // Already find the available stat under current path.
