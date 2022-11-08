@@ -91,16 +91,6 @@ public:
             return type.load() == BlobStatType::NORMAL;
         }
 
-        bool isReadOnly() const
-        {
-            return type.load() == BlobStatType::READ_ONLY;
-        }
-
-        void changeToReadOnly()
-        {
-            type.store(BlobStatType::READ_ONLY);
-        }
-
         BlobFileOffset getPosFromStat(size_t buf_size, const std::lock_guard<std::mutex> &);
 
         /**

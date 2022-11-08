@@ -105,18 +105,9 @@ FileUsageStatistics BlobStore<Trait>::getFileUsageStatistics() const
 
     // Get a copy of stats map to avoid the big lock on stats map
     const auto stat= blob_stats.getStat();
-    if (stat->isReadOnly())
-    {
-        usage.total_disk_size += stat->sm_total_size;
-        usage.total_valid_size += stat->sm_valid_size;
-    }
-    else
-    {
-        // Else the stat may being updated, acquire a lock to avoid data race.
-        auto lock = stat->lock();
-        usage.total_disk_size += stat->sm_total_size;
-        usage.total_valid_size += stat->sm_valid_size;
-    }
+    auto lock = stat->lock();
+    usage.total_disk_size += stat->sm_total_size;
+    usage.total_valid_size += stat->sm_valid_size;
     usage.total_file_num += 1;
 
     return usage;
@@ -896,12 +887,6 @@ std::vector<BlobFileId> BlobStore<Trait>::getGCStats()
     std::vector<BlobFileId> blob_need_gc;
     BlobStoreGCInfo blobstore_gc_info;
     auto stat = blob_stats.getStat();
-    if (stat->isReadOnly())
-    {
-        blobstore_gc_info.appendToReadOnlyBlob(stat->id, stat->sm_valid_rate);
-        LOG_FMT_TRACE(log, "Current [blob_id={}] is read-only", stat->id);
-        return blob_need_gc;
-    }
 
     auto lock = stat->lock();
     auto right_margin = stat->smap->getUsedBoundary();
@@ -940,21 +925,8 @@ std::vector<BlobFileId> BlobStore<Trait>::getGCStats()
         return blob_need_gc;
     }
 
-    // Check if GC is required
-    if (stat->sm_valid_rate <= config.heavy_gc_valid_rate)
-    {
-        LOG_FMT_TRACE(log, "Current [blob_id={}] valid rate is {:.2f}, Need do compact GC", stat->id, stat->sm_valid_rate);
-        blob_need_gc.emplace_back(stat->id);
-
-        // Change current stat to read only
-        stat->changeToReadOnly();
-        blobstore_gc_info.appendToNeedGCBlob(stat->id, stat->sm_valid_rate);
-    }
-    else
-    {
-        blobstore_gc_info.appendToNoNeedGCBlob(stat->id, stat->sm_valid_rate);
-        LOG_FMT_TRACE(log, "Current [blob_id={}] valid rate is {:.2f}, No need to GC.", stat->id, stat->sm_valid_rate);
-    }
+    blobstore_gc_info.appendToNoNeedGCBlob(stat->id, stat->sm_valid_rate);
+    LOG_FMT_TRACE(log, "Current [blob_id={}] valid rate is {:.2f}, No need to GC.", stat->id, stat->sm_valid_rate);
 
     if (right_margin != stat->sm_total_size)
     {
