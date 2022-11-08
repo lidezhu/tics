@@ -80,36 +80,7 @@ BlobStore<Trait>::BlobStore(String storage_name, const FileProviderPtr & file_pr
 template <typename Trait>
 void BlobStore<Trait>::registerPaths()
 {
-    for (const auto & path : delegator->listPaths())
-    {
-        Poco::File store_path(path);
-        if (!store_path.exists())
-        {
-            continue;
-        }
 
-        std::vector<String> file_list;
-        store_path.list(file_list);
-
-        for (const auto & blob_name : file_list)
-        {
-            const auto & [blob_id, err_msg] = BlobStats::getBlobIdFromName(blob_name);
-            auto lock_stats = blob_stats.lock();
-            if (blob_id != INVALID_BLOBFILE_ID)
-            {
-                Poco::File blob(fmt::format("{}/{}", path, blob_name));
-                auto blob_size = blob.getSize();
-                delegator->addPageFileUsedSize({blob_id, 0}, blob_size, path, true);
-                blob_stats.createStatNotChecking(blob_id,
-                                                 std::max(blob_size, config.file_limit_size.get()),
-                                                 lock_stats);
-            }
-            else
-            {
-                LOG_FMT_INFO(log, "Ignore not blob file [dir={}] [file={}] [err_msg={}]", path, blob_name, err_msg);
-            }
-        }
-    }
 }
 
 template <typename Trait>
@@ -133,29 +104,20 @@ FileUsageStatistics BlobStore<Trait>::getFileUsageStatistics() const
     FileUsageStatistics usage;
 
     // Get a copy of stats map to avoid the big lock on stats map
-    const auto stats_list = blob_stats.getStats();
-
-    for (const auto & [path, stats] : stats_list)
+    const auto stat= blob_stats.getStat();
+    if (stat->isReadOnly())
     {
-        (void)path;
-        for (const auto & stat : stats)
-        {
-            // We can access to these type without any locking.
-            if (stat->isReadOnly())
-            {
-                usage.total_disk_size += stat->sm_total_size;
-                usage.total_valid_size += stat->sm_valid_size;
-            }
-            else
-            {
-                // Else the stat may being updated, acquire a lock to avoid data race.
-                auto lock = stat->lock();
-                usage.total_disk_size += stat->sm_total_size;
-                usage.total_valid_size += stat->sm_valid_size;
-            }
-        }
-        usage.total_file_num += stats.size();
+        usage.total_disk_size += stat->sm_total_size;
+        usage.total_valid_size += stat->sm_valid_size;
     }
+    else
+    {
+        // Else the stat may being updated, acquire a lock to avoid data race.
+        auto lock = stat->lock();
+        usage.total_disk_size += stat->sm_total_size;
+        usage.total_valid_size += stat->sm_valid_size;
+    }
+    usage.total_file_num += 1;
 
     return usage;
 }
@@ -465,32 +427,8 @@ template <typename Trait>
 std::pair<BlobFileId, BlobFileOffset> BlobStore<Trait>::getPosFromStats(size_t size)
 {
     Stopwatch watch;
-    BlobStatPtr stat;
-
-    auto lock_stat = [size, this, &stat]() {
-        Stopwatch watch_inner;
-        auto lock_stats = blob_stats.lock();
-        BlobFileId blob_file_id = INVALID_BLOBFILE_ID;
-        std::tie(stat, blob_file_id) = blob_stats.chooseStat(size, lock_stats);
-        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_choose_stat).Observe(watch_inner.elapsedSeconds());
-        watch_inner.restart();
-        SCOPE_EXIT({
-            GET_METRIC(tiflash_storage_page_write_duration_seconds, type_lock_stat).Observe(watch_inner.elapsedSeconds());
-        });
-        if (stat == nullptr)
-        {
-            // No valid stat for putting data with `size`, create a new one
-            stat = blob_stats.createStat(blob_file_id,
-                                         std::max(size, config.file_limit_size.get()),
-                                         lock_stats);
-        }
-
-        // We must get the lock from BlobStat under the BlobStats lock
-        // to ensure that BlobStat updates are serialized.
-        // Otherwise it may cause stat to fail to get the span for writing
-        // and throwing exception.
-        return stat->lock();
-    }();
+    BlobStatPtr stat = blob_stats.getStat();
+    auto lock_stat = stat->lock();
 
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_get_stat_latch).Observe(watch.elapsedSeconds());
 
@@ -524,28 +462,9 @@ std::pair<BlobFileId, BlobFileOffset> BlobStore<Trait>::getPosFromStats(size_t s
 template <typename Trait>
 void BlobStore<Trait>::removePosFromStats(BlobFileId blob_id, BlobFileOffset offset, size_t size)
 {
-    bool need_remove_stat = false;
     const auto & stat = blob_stats.blobIdToStat(blob_id);
-    {
-        auto lock = stat->lock();
-        auto remaining_valid_size = stat->removePosFromStat(offset, size, lock);
-        // BlobFile which is read-only won't be reused for another writing,
-        // so it's safe and necessary to remove it here.
-        need_remove_stat = stat->isReadOnly() && (remaining_valid_size == 0);
-    }
-
-    // We don't need hold the BlobStat lock(Also can't do that).
-    // Because once BlobStat become Read-Only type, Then valid size won't increase.
-    if (need_remove_stat)
-    {
-        LOG_FMT_INFO(log, "Removing BlobFile [blob_id={}]", blob_id);
-
-        auto blob_file = getBlobFile(blob_id);
-        auto lock_stats = blob_stats.lock();
-        blob_stats.eraseStat(std::move(stat), lock_stats);
-        blob_file->remove();
-        cached_files.remove(blob_id);
-    }
+    auto lock = stat->lock();
+    stat->removePosFromStat(offset, size, lock);
 }
 
 template <typename Trait>
@@ -974,99 +893,78 @@ template <typename Trait>
 std::vector<BlobFileId> BlobStore<Trait>::getGCStats()
 {
     // Get a copy of stats map to avoid the big lock on stats map
-    const auto stats_list = blob_stats.getStats();
     std::vector<BlobFileId> blob_need_gc;
     BlobStoreGCInfo blobstore_gc_info;
-
-    fiu_do_on(FailPoints::force_change_all_blobs_to_read_only,
-              {
-                  for (const auto & [path, stats] : stats_list)
-                  {
-                      (void)path;
-                      for (const auto & stat : stats)
-                      {
-                          stat->changeToReadOnly();
-                      }
-                  }
-                  LOG_FMT_WARNING(log, "enabled force_change_all_blobs_to_read_only. All of BlobStat turn to READ-ONLY");
-              });
-
-    for (const auto & [path, stats] : stats_list)
+    auto stat = blob_stats.getStat();
+    if (stat->isReadOnly())
     {
-        (void)path;
-        for (const auto & stat : stats)
-        {
-            if (stat->isReadOnly())
-            {
-                blobstore_gc_info.appendToReadOnlyBlob(stat->id, stat->sm_valid_rate);
-                LOG_FMT_TRACE(log, "Current [blob_id={}] is read-only", stat->id);
-                continue;
-            }
+        blobstore_gc_info.appendToReadOnlyBlob(stat->id, stat->sm_valid_rate);
+        LOG_FMT_TRACE(log, "Current [blob_id={}] is read-only", stat->id);
+        return blob_need_gc;
+    }
 
-            auto lock = stat->lock();
-            auto right_margin = stat->smap->getUsedBoundary();
+    auto lock = stat->lock();
+    auto right_margin = stat->smap->getUsedBoundary();
 
-            // Avoid divide by zero
-            if (right_margin == 0)
-            {
-                // Note `stat->sm_total_size` isn't strictly the same as the actual size of underlying BlobFile after restart tiflash,
-                // because some entry may be deleted but the actual disk space is not reclaimed in previous run.
-                // TODO: avoid always truncate on empty BlobFile
-                RUNTIME_CHECK_MSG(stat->sm_valid_size == 0, "Current blob is empty, but valid size is not 0. [blob_id={}] [valid_size={}] [valid_rate={}]", stat->id, stat->sm_valid_size, stat->sm_valid_rate);
+    // Avoid divide by zero
+    if (right_margin == 0)
+    {
+        // Note `stat->sm_total_size` isn't strictly the same as the actual size of underlying BlobFile after restart tiflash,
+        // because some entry may be deleted but the actual disk space is not reclaimed in previous run.
+        // TODO: avoid always truncate on empty BlobFile
+        RUNTIME_CHECK_MSG(stat->sm_valid_size == 0, "Current blob is empty, but valid size is not 0. [blob_id={}] [valid_size={}] [valid_rate={}]", stat->id, stat->sm_valid_size, stat->sm_valid_rate);
 
-                // If current blob empty, the size of in disk blob may not empty
-                // So we need truncate current blob, and let it be reused.
-                auto blobfile = getBlobFile(stat->id);
-                LOG_FMT_INFO(log, "Current blob file is empty, truncated to zero [blob_id={}] [total_size={}] [valid_rate={}]", stat->id, stat->sm_total_size, stat->sm_valid_rate);
-                blobfile->truncate(right_margin);
-                blobstore_gc_info.appendToTruncatedBlob(stat->id, stat->sm_total_size, right_margin, stat->sm_valid_rate);
-                stat->sm_total_size = right_margin;
-                continue;
-            }
+        // If current blob empty, the size of in disk blob may not empty
+        // So we need truncate current blob, and let it be reused.
+        auto blobfile = getBlobFile(stat->id);
+        LOG_FMT_INFO(log, "Current blob file is empty, truncated to zero [blob_id={}] [total_size={}] [valid_rate={}]", stat->id, stat->sm_total_size, stat->sm_valid_rate);
+        blobfile->truncate(right_margin);
+        blobstore_gc_info.appendToTruncatedBlob(stat->id, stat->sm_total_size, right_margin, stat->sm_valid_rate);
+        stat->sm_total_size = right_margin;
+        return blob_need_gc;
+    }
 
-            stat->sm_valid_rate = stat->sm_valid_size * 1.0 / right_margin;
+    stat->sm_valid_rate = stat->sm_valid_size * 1.0 / right_margin;
 
-            if (stat->sm_valid_rate > 1.0)
-            {
-                LOG_FMT_ERROR(
-                    log,
-                    "Current blob got an invalid rate {:.2f}, total size is {}, valid size is {}, right margin is {} [blob_id={}]",
-                    stat->sm_valid_rate,
-                    stat->sm_total_size,
-                    stat->sm_valid_size,
-                    right_margin,
-                    stat->id);
-                assert(false);
-                continue;
-            }
+    if (stat->sm_valid_rate > 1.0)
+    {
+        LOG_FMT_ERROR(
+            log,
+            "Current blob got an invalid rate {:.2f}, total size is {}, valid size is {}, right margin is {} [blob_id={}]",
+            stat->sm_valid_rate,
+            stat->sm_total_size,
+            stat->sm_valid_size,
+            right_margin,
+            stat->id);
+        assert(false);
+        return blob_need_gc;
+    }
 
-            // Check if GC is required
-            if (stat->sm_valid_rate <= config.heavy_gc_valid_rate)
-            {
-                LOG_FMT_TRACE(log, "Current [blob_id={}] valid rate is {:.2f}, Need do compact GC", stat->id, stat->sm_valid_rate);
-                blob_need_gc.emplace_back(stat->id);
+    // Check if GC is required
+    if (stat->sm_valid_rate <= config.heavy_gc_valid_rate)
+    {
+        LOG_FMT_TRACE(log, "Current [blob_id={}] valid rate is {:.2f}, Need do compact GC", stat->id, stat->sm_valid_rate);
+        blob_need_gc.emplace_back(stat->id);
 
-                // Change current stat to read only
-                stat->changeToReadOnly();
-                blobstore_gc_info.appendToNeedGCBlob(stat->id, stat->sm_valid_rate);
-            }
-            else
-            {
-                blobstore_gc_info.appendToNoNeedGCBlob(stat->id, stat->sm_valid_rate);
-                LOG_FMT_TRACE(log, "Current [blob_id={}] valid rate is {:.2f}, No need to GC.", stat->id, stat->sm_valid_rate);
-            }
+        // Change current stat to read only
+        stat->changeToReadOnly();
+        blobstore_gc_info.appendToNeedGCBlob(stat->id, stat->sm_valid_rate);
+    }
+    else
+    {
+        blobstore_gc_info.appendToNoNeedGCBlob(stat->id, stat->sm_valid_rate);
+        LOG_FMT_TRACE(log, "Current [blob_id={}] valid rate is {:.2f}, No need to GC.", stat->id, stat->sm_valid_rate);
+    }
 
-            if (right_margin != stat->sm_total_size)
-            {
-                auto blobfile = getBlobFile(stat->id);
-                LOG_FMT_TRACE(log, "Truncate blob file [blob_id={}] [origin size={}] [truncated size={}]", stat->id, stat->sm_total_size, right_margin);
-                blobfile->truncate(right_margin);
-                blobstore_gc_info.appendToTruncatedBlob(stat->id, stat->sm_total_size, right_margin, stat->sm_valid_rate);
+    if (right_margin != stat->sm_total_size)
+    {
+        auto blobfile = getBlobFile(stat->id);
+        LOG_FMT_TRACE(log, "Truncate blob file [blob_id={}] [origin size={}] [truncated size={}]", stat->id, stat->sm_total_size, right_margin);
+        blobfile->truncate(right_margin);
+        blobstore_gc_info.appendToTruncatedBlob(stat->id, stat->sm_total_size, right_margin, stat->sm_valid_rate);
 
-                stat->sm_total_size = right_margin;
-                stat->sm_valid_rate = stat->sm_valid_size * 1.0 / stat->sm_total_size;
-            }
-        }
+        stat->sm_total_size = right_margin;
+        stat->sm_valid_rate = stat->sm_valid_size * 1.0 / stat->sm_total_size;
     }
 
     LOG_FMT_INFO(log, "BlobStore gc get status done. gc info: {}", blobstore_gc_info.toString());

@@ -132,52 +132,11 @@ public:
 public:
     BlobStats(LoggerPtr log_, PSDiskDelegatorPtr delegator_, BlobConfig & config);
 
-    // Don't require a lock from BlobStats When you already hold a BlobStat lock
-    //
-    // Safe options:
-    // 1. Hold a BlobStats lock, then Hold a/many BlobStat lock(s).
-    // 2. Without hold a BlobStats lock, But hold a/many BlobStat lock(s).
-    // 3. Hold a BlobStats lock, without hold a/many BlobStat lock(s).
-    //
-    // Not safe options:
-    // 1. then Hold a/many BlobStat lock(s), then a BlobStats lock.
-    //
-    [[nodiscard]] std::lock_guard<std::mutex> lock() const;
-
-    BlobStatPtr createStatNotChecking(BlobFileId blob_file_id, UInt64 max_caps, const std::lock_guard<std::mutex> &);
-
-    BlobStatPtr createStat(BlobFileId blob_file_id, UInt64 max_caps, const std::lock_guard<std::mutex> & guard);
-
-    void eraseStat(const BlobStatPtr && stat, const std::lock_guard<std::mutex> &);
-
-    void eraseStat(BlobFileId blob_file_id, const std::lock_guard<std::mutex> &);
-
-    /**
-         * Choose a available `BlobStat` from `BlobStats`.
-         * 
-         * If we can't find any usable span to fit `buf_size` in the existed stats.
-         * Then it will return null `BlobStat` with a available `BlobFileId`. 
-         * eq. {nullptr,`BlobFileId`}.
-         * The `BlobFileId` can use to create a new `BlobFile`.
-         *  
-         * If we do find a usable span to fit `buf_size`.
-         * Then it will return a available `BlobStatPtr` with a `INVALID_BLOBFILE_ID`.
-         * eq. {`BlobStatPtr`,INVALID_BLOBFILE_ID}.
-         * The `INVALID_BLOBFILE_ID` means that you don't need create a new `BlobFile`.
-         * 
-         */
-    std::pair<BlobStatPtr, BlobFileId> chooseStat(size_t buf_size, const std::lock_guard<std::mutex> &);
-
-    BlobStatPtr blobIdToStat(BlobFileId file_id, bool ignore_not_exist = false);
-
-    using StatsMap = std::map<String, std::vector<BlobStatPtr>>;
-    StatsMap getStats() const
-    {
-        auto guard = lock();
-        return stats_map;
-    }
+    BlobStatPtr getStat() const { return stat; };
 
     static std::pair<BlobFileId, String> getBlobIdFromName(String blob_name);
+
+    BlobStatPtr blobIdToStat(BlobFileId file_id, bool ignore_not_exist = false);
 
 #ifndef DBMS_PUBLIC_GTEST
 private:
@@ -194,12 +153,7 @@ private:
     PSDiskDelegatorPtr delegator;
     BlobConfig & config;
 
-    mutable std::mutex lock_stats;
-    BlobFileId roll_id = 1;
-    // Index for selecting next path for creating new blobfile
-    UInt32 stats_map_path_index = 0;
-    std::map<String, std::vector<BlobStatPtr>> stats_map;
-    std::map<String, UInt32> stats_map_next_index;
+    BlobStatPtr stat;
 };
 
 } // namespace DB::PS::V3

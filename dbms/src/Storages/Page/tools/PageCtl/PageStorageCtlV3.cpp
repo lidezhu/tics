@@ -230,6 +230,7 @@ private:
 
     static String getBlobsInfo(BlobStore<u128::BlobStoreTrait> & blob_store, UInt32 blob_id)
     {
+        std::ignore = blob_id;
         auto stat_info = [](const BlobStats::BlobStatPtr & stat, const String & path) {
             FmtBuffer stat_str;
             stat_str.fmtAppend("    stat id: {}\n"
@@ -253,28 +254,8 @@ private:
         FmtBuffer stats_info;
         stats_info.append("  Blobs specific info: \n\n");
 
-        for (const auto & [path, stats] : blob_store.blob_stats.getStats())
-        {
-            for (const auto & stat : stats)
-            {
-                if (blob_id != UINT32_MAX)
-                {
-                    if (stat->id == blob_id)
-                    {
-                        stats_info.append(stat_info(stat, path));
-                        return stats_info.toString();
-                    }
-                    continue;
-                }
-
-                stats_info.append(stat_info(stat, path));
-            }
-        }
-
-        if (blob_id != UINT32_MAX)
-        {
-            stats_info.fmtAppend("    no found blob {}", blob_id);
-        }
+        const auto stat = blob_store.blob_stats.getStat();
+        stats_info.append(stat_info(stat, ""));
         return stats_info.toString();
     }
 
@@ -345,6 +326,7 @@ private:
 
     static String getSummaryInfo(PageDirectory<u128::PageDirectoryTrait>::MVCCMapType & mvcc_table_directory, BlobStore<u128::BlobStoreTrait> & blob_store)
     {
+        std::ignore = blob_store;
         UInt64 longest_version_chain = 0;
         UInt64 shortest_version_chain = UINT64_MAX;
         FmtBuffer dir_summary_info;
@@ -364,29 +346,6 @@ private:
                                    shortest_version_chain);
 
         dir_summary_info.append("  Blobs summary info: \n");
-        const auto & blob_stats = blob_store.blob_stats.getStats();
-        dir_summary_info.joinStr(
-            blob_stats.begin(),
-            blob_stats.end(),
-            [](const auto arg, FmtBuffer & fb) {
-                for (const auto & stat : arg.second)
-                {
-                    fb.fmtAppend("   stat id: {}\n"
-                                 "     path: {}\n"
-                                 "     total size: {}\n"
-                                 "     valid size: {}\n"
-                                 "     valid rate: {}\n"
-                                 "     max cap: {}\n",
-                                 stat->id,
-                                 arg.first,
-                                 stat->sm_total_size,
-                                 stat->sm_valid_size,
-                                 stat->sm_valid_rate,
-                                 stat->sm_max_caps);
-                }
-            },
-            "");
-
         return dir_summary_info.toString();
     }
 
