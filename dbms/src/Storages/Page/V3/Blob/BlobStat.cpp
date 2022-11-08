@@ -41,7 +41,7 @@ BlobStats::BlobStats(LoggerPtr log_, PSDiskDelegatorPtr delegator_, BlobConfig &
     , stat(std::make_shared<BlobStat>(
                1,
                static_cast<SpaceMap::SpaceMapType>(config.spacemap_type.get()),
-               200 * 1024 * 1024 * 1024,
+               214748364800,
                BlobStats::BlobStatType::NORMAL))
 {
     PageFileIdAndLevel id_lvl{1, 0};
