@@ -113,15 +113,27 @@ struct UniversalPageStorageWrapper
 {
     UniversalPageStoragePtr uni_page_storage;
     BackgroundProcessingPool::TaskHandle gc_handle;
+    std::atomic<Timepoint> last_try_gc_time = Clock::now();
 
     void restore(Context & global_context)
     {
         uni_page_storage->restore();
         gc_handle = global_context.getBackgroundPool().addTask(
             [this, global_context] {
-                return this->uni_page_storage->gc();
+                return this->gc();
             },
             false);
+    }
+
+    bool gc()
+    {
+        Timepoint now = Clock::now();
+        const std::chrono::seconds try_gc_period(60);
+        if (now < (last_try_gc_time.load() + try_gc_period))
+            return false;
+
+        last_try_gc_time = now;
+        return this->uni_page_storage->gc();
     }
 };
 using UniversalPageStorageWrapperPtr = std::shared_ptr<UniversalPageStorageWrapper>;
