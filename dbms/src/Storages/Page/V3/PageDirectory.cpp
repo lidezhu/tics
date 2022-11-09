@@ -1076,6 +1076,19 @@ typename Trait::PageIdSet PageDirectory<Trait>::getRangePageIds(const typename T
 }
 
 template <typename Trait>
+typename Trait::PageIds PageDirectory<Trait>::getLowerBound(const typename Trait::PageId & start)
+{
+    typename Trait::PageIds page_ids;
+
+    std::shared_lock read_lock(table_rw_mutex);
+    if (auto iter = mvcc_table_directory.lower_bound(start); iter != mvcc_table_directory.end())
+    {
+        page_ids.emplace_back(iter->first);
+    }
+    return page_ids;
+}
+
+template <typename Trait>
 void PageDirectory<Trait>::applyRefEditRecord(
     MVCCMapType & mvcc_table_directory,
     const VersionedPageEntriesPtr & version_list,

@@ -289,6 +289,11 @@ public:
         }
     }
 
+    UniversalPageIds getLowerBound(const UniversalPageId & page_id)
+    {
+        return uni_storage.page_directory->getLowerBound(page_id);
+    }
+
 private:
     UniversalPageStorage & uni_storage;
 };

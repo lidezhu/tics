@@ -300,6 +300,45 @@ void GcPageWithViewVec(PageWithView * inner, uint64_t len)
     delete inner;
 }
 
+void PurgePageStorage(const EngineStoreServerWrap * server)
+{
+    try
+    {
+        auto uni_ps = server->tmt->getContext().getGlobalUniversalPageStorage();
+        uni_ps->gc();
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+        exit(-1);
+    }
+}
+
+CppStrWithView SeekPSKey(const EngineStoreServerWrap * server, BaseBuffView raw_page_id)
+{
+    try
+    {
+        auto uni_ps = server->tmt->getContext().getGlobalUniversalPageStorage();
+        RaftLogReader reader(*uni_ps);
+        UniversalPageId page_id{raw_page_id.data, raw_page_id.len};
+        auto page_ids = reader.getLowerBound(page_id);
+        if (page_ids.empty())
+        {
+            return CppStrWithView{.inner = GenRawCppPtr(), .view = BaseBuffView{}};
+        }
+        else
+        {
+            auto * s = RawCppString::New(page_ids[0]);
+            return CppStrWithView{.inner = GenRawCppPtr(s, RawCppPtrTypeImpl::String), .view = BaseBuffView{s->data(), s->size()}};
+        }
+    }
+    catch (...)
+    {
+        tryLogCurrentException(__PRETTY_FUNCTION__);
+        exit(-1);
+    }
+}
+
 static_assert(sizeof(RaftStoreProxyFFIHelper) == sizeof(TiFlashRaftProxyHelper));
 static_assert(alignof(RaftStoreProxyFFIHelper) == alignof(TiFlashRaftProxyHelper));
 

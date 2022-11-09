@@ -18,6 +18,7 @@
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include "ext/scope_guard.h"
 
 namespace ProfileEvents
 {
@@ -203,8 +204,6 @@ void BlobStats::eraseStat(BlobFileId blob_file_id, const std::lock_guard<std::mu
 
 std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_size, const std::lock_guard<std::mutex> &)
 {
-    BlobStatPtr stat_ptr = nullptr;
-
     // No stats exist
     if (stats_map.empty())
     {
@@ -219,6 +218,10 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
     std::advance(stats_iter, stats_map_path_index);
 
     size_t path_iter_idx = 0;
+    SCOPE_EXIT({
+        // advance the `stats_map_path_idx` without size checking
+        stats_map_path_index += path_iter_idx + 1;
+    });
     for (path_iter_idx = 0; path_iter_idx < stats_map.size(); ++path_iter_idx)
     {
         // Try to find a suitable stat under current path (path=`stats_iter->first`)
@@ -230,15 +233,8 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
             auto lock = stat->lock(); // TODO: will it bring performance regression?
             if (stat->isNormal() && stat->sm_max_caps >= buf_size)
             {
-                stat_ptr = stat;
-                break;
+                return std::make_pair(stat, INVALID_BLOBFILE_ID);
             }
-        }
-
-        // Already find the available stat under current path.
-        if (stat_ptr != nullptr)
-        {
-            break;
         }
 
         // Try to find stat in the next path.
@@ -249,16 +245,7 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
         }
     }
 
-    // advance the `stats_map_path_idx` without size checking
-    stats_map_path_index += path_iter_idx + 1;
-
-    // Can not find a suitable stat under all paths
-    if (stat_ptr == nullptr)
-    {
-        return std::make_pair(nullptr, roll_id);
-    }
-
-    return std::make_pair(stat_ptr, INVALID_BLOBFILE_ID);
+    return std::make_pair(nullptr, roll_id);
 }
 
 BlobStats::BlobStatPtr BlobStats::blobIdToStat(BlobFileId file_id, bool ignore_not_exist)

@@ -140,6 +140,8 @@ void ConsumeWriteBatch(const EngineStoreServerWrap * server, RawVoidPtr ptr);
 PageWithView HandleReadPage(const EngineStoreServerWrap * server, BaseBuffView page_id);
 PageWithViewVec HandleScanPage(const EngineStoreServerWrap * server, BaseBuffView start_page_id, BaseBuffView end_page_id);
 void GcPageWithViewVec(PageWithView * inner, uint64_t len);
+void PurgePageStorage(const EngineStoreServerWrap * server);
+CppStrWithView SeekPSKey(const EngineStoreServerWrap * server, BaseBuffView raw_page_id);
 void AtomicUpdateProxy(EngineStoreServerWrap * server, RaftStoreProxyFFIHelper * proxy);
 void HandleDestroy(EngineStoreServerWrap * server, uint64_t region_id);
 EngineStoreApplyRes HandleIngestSST(EngineStoreServerWrap * server, SSTViewVec snaps, RaftCmdHeader header);
@@ -187,6 +189,8 @@ inline EngineStoreServerHelper GetEngineStoreServerHelper(
         .fn_handle_read_page = HandleReadPage,
         .fn_handle_scan_page = HandleScanPage,
         .fn_gc_page_with_view_vec = GcPageWithViewVec,
+        .fn_handle_purge_pagestorage = PurgePageStorage,
+        .fn_handle_seek_ps_key = SeekPSKey,
         .fn_atomic_update_proxy = AtomicUpdateProxy,
         .fn_handle_destroy = HandleDestroy,
         .fn_handle_ingest_sst = HandleIngestSST,
