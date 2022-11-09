@@ -128,7 +128,7 @@ struct UniversalPageStorageWrapper
     bool gc()
     {
         Timepoint now = Clock::now();
-        const std::chrono::seconds try_gc_period(60);
+        const std::chrono::seconds try_gc_period(10);
         if (now < (last_try_gc_time.load() + try_gc_period))
             return false;
 
