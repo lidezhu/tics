@@ -230,8 +230,8 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
             stats_map_next_index[stats_iter->first] = stats_map_next_index[stats_iter->first] % stats_iter->second.size();
             const auto & stat = (stats_iter->second)[stats_map_next_index[stats_iter->first]];
             stats_map_next_index[stats_iter->first] += 1;
-            auto lock = stat->lock(); // TODO: will it bring performance regression?
-            if (stat->isNormal() && stat->sm_max_caps >= buf_size)
+            auto lock = stat->defer_lock(); // TODO: will it bring performance regression?
+            if (lock.try_lock() && stat->isNormal() && stat->sm_max_caps >= buf_size)
             {
                 return std::make_pair(stat, INVALID_BLOBFILE_ID);
             }
@@ -277,7 +277,7 @@ BlobStats::BlobStatPtr BlobStats::blobIdToStat(BlobFileId file_id, bool ignore_n
   * BlobStat methods *
   ********************/
 
-BlobFileOffset BlobStats::BlobStat::getPosFromStat(size_t buf_size, const std::lock_guard<std::mutex> &)
+BlobFileOffset BlobStats::BlobStat::getPosFromStat(size_t buf_size, const std::unique_lock<std::mutex> &)
 {
     BlobFileOffset offset = 0;
     UInt64 max_cap = 0;
@@ -315,7 +315,7 @@ BlobFileOffset BlobStats::BlobStat::getPosFromStat(size_t buf_size, const std::l
     return offset;
 }
 
-size_t BlobStats::BlobStat::removePosFromStat(BlobFileOffset offset, size_t buf_size, const std::lock_guard<std::mutex> &)
+size_t BlobStats::BlobStat::removePosFromStat(BlobFileOffset offset, size_t buf_size, const std::unique_lock<std::mutex> &)
 {
     if (!smap->markFree(offset, buf_size))
     {
