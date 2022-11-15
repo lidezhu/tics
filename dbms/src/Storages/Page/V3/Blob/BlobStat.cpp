@@ -18,6 +18,7 @@
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+#include "ext/scope_guard.h"
 
 namespace ProfileEvents
 {
@@ -157,13 +158,20 @@ BlobStats::BlobStatPtr BlobStats::createStatNotChecking(BlobFileId blob_file_id,
     /// If creating a new BlobFile, we need to register the BlobFile's path to delegator, so it's necessary to call `addPageFileUsedSize` here.
     delegator->addPageFileUsedSize({blob_file_id, 0}, 0, path, true);
     stats_map[path].emplace_back(stat);
+    if (stats_map_next_index.find(path) == stats_map_next_index.end())
+    {
+        stats_map_next_index[path] = 0;
+    }
     return stat;
 }
 
 void BlobStats::eraseStat(const BlobStatPtr && stat, const std::lock_guard<std::mutex> &)
 {
     PageFileIdAndLevel id_lvl{stat->id, 0};
-    stats_map[delegator->getPageFilePath(id_lvl)].remove(stat);
+    auto & stats = stats_map[delegator->getPageFilePath(id_lvl)];
+    auto iter = std::find(stats.begin(), stats.end(), stat);
+    assert(iter != stats.end());
+    stats.erase(iter);
 }
 
 void BlobStats::eraseStat(BlobFileId blob_file_id, const std::lock_guard<std::mutex> & lock)
@@ -196,9 +204,6 @@ void BlobStats::eraseStat(BlobFileId blob_file_id, const std::lock_guard<std::mu
 
 std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_size, const std::lock_guard<std::mutex> &)
 {
-    BlobStatPtr stat_ptr = nullptr;
-    double smallest_valid_rate = 2;
-
     // No stats exist
     if (stats_map.empty())
     {
@@ -213,25 +218,23 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
     std::advance(stats_iter, stats_map_path_index);
 
     size_t path_iter_idx = 0;
+    SCOPE_EXIT({
+        // advance the `stats_map_path_idx` without size checking
+        stats_map_path_index += path_iter_idx + 1;
+    });
     for (path_iter_idx = 0; path_iter_idx < stats_map.size(); ++path_iter_idx)
     {
         // Try to find a suitable stat under current path (path=`stats_iter->first`)
-        for (const auto & stat : stats_iter->second)
+        for (size_t i = 0; i < stats_iter->second.size(); i++)
         {
-            auto lock = stat->lock(); // TODO: will it bring performance regression?
-            if (stat->isNormal()
-                && stat->sm_max_caps >= buf_size
-                && stat->sm_valid_rate < smallest_valid_rate)
+            stats_map_next_index[stats_iter->first] = stats_map_next_index[stats_iter->first] % stats_iter->second.size();
+            const auto & stat = (stats_iter->second)[stats_map_next_index[stats_iter->first]];
+            stats_map_next_index[stats_iter->first] += 1;
+            auto lock = stat->defer_lock(); // TODO: will it bring performance regression?
+            if (lock.try_lock() && stat->isNormal() && stat->sm_max_caps >= buf_size)
             {
-                smallest_valid_rate = stat->sm_valid_rate;
-                stat_ptr = stat;
+                return std::make_pair(stat, INVALID_BLOBFILE_ID);
             }
-        }
-
-        // Already find the available stat under current path.
-        if (stat_ptr != nullptr)
-        {
-            break;
         }
 
         // Try to find stat in the next path.
@@ -242,16 +245,7 @@ std::pair<BlobStats::BlobStatPtr, BlobFileId> BlobStats::chooseStat(size_t buf_s
         }
     }
 
-    // advance the `stats_map_path_idx` without size checking
-    stats_map_path_index += path_iter_idx + 1;
-
-    // Can not find a suitable stat under all paths
-    if (stat_ptr == nullptr)
-    {
-        return std::make_pair(nullptr, roll_id);
-    }
-
-    return std::make_pair(stat_ptr, INVALID_BLOBFILE_ID);
+    return std::make_pair(nullptr, roll_id);
 }
 
 BlobStats::BlobStatPtr BlobStats::blobIdToStat(BlobFileId file_id, bool ignore_not_exist)
@@ -283,14 +277,14 @@ BlobStats::BlobStatPtr BlobStats::blobIdToStat(BlobFileId file_id, bool ignore_n
   * BlobStat methods *
   ********************/
 
-BlobFileOffset BlobStats::BlobStat::getPosFromStat(size_t buf_size, const std::lock_guard<std::mutex> &)
+BlobFileOffset BlobStats::BlobStat::getPosFromStat(size_t buf_size, const std::unique_lock<std::mutex> &)
 {
     BlobFileOffset offset = 0;
     UInt64 max_cap = 0;
     bool expansion = true;
 
     std::tie(offset, max_cap, expansion) = smap->searchInsertOffset(buf_size);
-    ProfileEvents::increment(expansion ? ProfileEvents::PSV3MBlobExpansion : ProfileEvents::PSV3MBlobReused);
+//    ProfileEvents::increment(expansion ? ProfileEvents::PSV3MBlobExpansion : ProfileEvents::PSV3MBlobReused);
 
     /**
      * Whatever `searchInsertOffset` success or failed,
@@ -321,7 +315,7 @@ BlobFileOffset BlobStats::BlobStat::getPosFromStat(size_t buf_size, const std::l
     return offset;
 }
 
-size_t BlobStats::BlobStat::removePosFromStat(BlobFileOffset offset, size_t buf_size, const std::lock_guard<std::mutex> &)
+size_t BlobStats::BlobStat::removePosFromStat(BlobFileOffset offset, size_t buf_size, const std::unique_lock<std::mutex> &)
 {
     if (!smap->markFree(offset, buf_size))
     {

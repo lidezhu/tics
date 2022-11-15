@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <Common/SyncPoint/Ctl.h>
 #include <Encryption/MockKeyManager.h>
 #include <Poco/Logger.h>
 #include <Storages/Page/PageDefines.h>
@@ -29,6 +30,8 @@
 #include <TestUtils/MockDiskDelegator.h>
 #include <TestUtils/TiFlashTestEnv.h>
 
+#include <future>
+#include <mutex>
 #include <random>
 
 namespace DB::PS::V3::tests
@@ -335,13 +338,29 @@ public:
     }
 
 protected:
+<<<<<<< HEAD
     static void applyWithSameVersion(WALStorePtr & wal, u128::PageEntriesEdit & edit, const PageVersion & version)
+=======
+    static void applyWithSameVersion(const WALStorePtr & wal, PageEntriesEdit & edit, const PageVersion & version)
+>>>>>>> 47480fc3a (PageStorage: Fix peak memory usage when running GC on PageDirectory (#6168))
     {
         for (auto & r : edit.getMutRecords())
         {
             r.version = version;
         }
         wal->apply(u128::Serializer::serializeTo(edit));
+    }
+
+    static void rollToNewLogWriter(const WALStorePtr & wal)
+    {
+        std::lock_guard guard(wal->log_file_mutex);
+        wal->rollToNewLogWriter(guard);
+    }
+
+    size_t getNumLogFiles()
+    {
+        auto log_files = WALStoreReader::listAllFiles(delegator, log);
+        return log_files.size();
     }
 
 private:
@@ -353,9 +372,10 @@ protected:
     LoggerPtr log;
 };
 
-TEST_P(WALStoreTest, FindCheckpointFile)
+TEST(WALStoreReaderTest, FindCheckpointFile)
 {
-    auto path = getTemporaryPath();
+    auto log = Logger::get();
+    auto path = base::TiFlashStorageTestBasic::getTemporaryPath();
 
     {
         // no checkpoint
@@ -704,8 +724,7 @@ try
     // Test for save snapshot (with encryption)
 
     LogFilenameSet persisted_log_files = WALStoreReader::listAllFiles(delegator, log);
-    WALStore::FilesSnapshot file_snap{.current_writing_log_num = 100, // just a fake value
-                                      .persisted_log_files = persisted_log_files};
+    WALStore::FilesSnapshot file_snap{.persisted_log_files = persisted_log_files};
 
     u128::PageEntriesEdit snap_edit;
     PageEntryV3 entry{.file_id = 2, .size = 1, .padded_size = 0, .tag = 0, .offset = 0x123, .checksum = 0x4567};
@@ -742,6 +761,68 @@ try
     EXPECT_EQ(num_pages_read, 70);
 }
 CATCH
+
+TEST_P(WALStoreTest, GetFileSnapshot)
+{
+    auto ctx = DB::tests::TiFlashTestEnv::getContext();
+    auto provider = ctx.getFileProvider();
+    auto path = getTemporaryPath();
+
+    auto [wal, reader] = WALStore::create(getCurrentTestName(), provider, delegator, config);
+    ASSERT_NE(wal, nullptr);
+
+    // running gc right before any writes is skip
+    ASSERT_FALSE(wal->tryGetFilesSnapshot(1, false).isValid());
+
+    // generate log_1_0, log_2_0, log_3_0
+    rollToNewLogWriter(wal);
+    rollToNewLogWriter(wal);
+    rollToNewLogWriter(wal);
+
+    ASSERT_EQ(getNumLogFiles(), 3);
+    // num of files not exceed 5, skip
+    ASSERT_FALSE(wal->tryGetFilesSnapshot(5, false).isValid());
+    // num of files not exceed 3, skip
+    ASSERT_FALSE(wal->tryGetFilesSnapshot(3, false).isValid());
+    // num of files not exceed 3, but still valid when `force` is true
+    ASSERT_TRUE(wal->tryGetFilesSnapshot(3, true).isValid());
+
+    rollToNewLogWriter(wal);
+    // num of files exceed 3, return
+    {
+        ASSERT_EQ(getNumLogFiles(), 4);
+        auto files = wal->tryGetFilesSnapshot(3, false);
+        ASSERT_TRUE(files.isValid());
+        ASSERT_EQ(files.persisted_log_files.size(), 4);
+        ASSERT_EQ(files.persisted_log_files.begin()->log_num, 1);
+        ASSERT_EQ(files.persisted_log_files.rbegin()->log_num, 4);
+        ASSERT_EQ(getNumLogFiles(), 4);
+    }
+
+    {
+        // write new edit, new log file generated
+        PageEntriesEdit edit;
+        edit.del(buildV3Id(TEST_NAMESPACE_ID, 100));
+        wal->apply(ser::serializeTo(edit));
+    }
+
+    {
+        ASSERT_EQ(getNumLogFiles(), 5);
+        auto files = wal->tryGetFilesSnapshot(3, false);
+        ASSERT_TRUE(files.isValid());
+        ASSERT_EQ(files.persisted_log_files.size(), 5);
+        ASSERT_EQ(files.persisted_log_files.begin()->log_num, 1);
+        ASSERT_EQ(files.persisted_log_files.rbegin()->log_num, 5);
+        ASSERT_EQ(getNumLogFiles(), 5);
+
+        // empty
+        PageEntriesEdit snap_edit;
+        bool done = wal->saveSnapshot(std::move(files), ser::serializeTo(snap_edit), snap_edit.size());
+        ASSERT_TRUE(done);
+        ASSERT_EQ(getNumLogFiles(), 1);
+    }
+}
+
 
 INSTANTIATE_TEST_CASE_P(
     Disks,

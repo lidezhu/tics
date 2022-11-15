@@ -14,6 +14,7 @@
 
 #include <Common/Checksum.h>
 #include <Common/CurrentMetrics.h>
+#include <Common/Stopwatch.h>
 #include <Common/Exception.h>
 #include <Common/FailPoint.h>
 #include <Common/Logger.h>
@@ -245,6 +246,7 @@ template <typename Trait>
 typename Trait::PageEntriesEdit
 BlobStore<Trait>::write(typename Trait::WriteBatch & wb, const WriteLimiterPtr & write_limiter)
 {
+    Stopwatch watch;
     ProfileEvents::increment(ProfileEvents::PSMWritePages, wb.putWriteCount());
 
     const size_t all_page_data_size = wb.getTotalDataSize();
@@ -308,6 +310,8 @@ BlobStore<Trait>::write(typename Trait::WriteBatch & wb, const WriteLimiterPtr &
     size_t actually_allocated_size = all_page_data_size + replenish_size;
 
     auto [blob_id, offset_in_file] = getPosFromStats(actually_allocated_size);
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_get_stat).Observe(watch.elapsedSeconds());
+    watch.restart();
 
     size_t offset_in_allocated = 0;
 
@@ -390,10 +394,13 @@ BlobStore<Trait>::write(typename Trait::WriteBatch & wb, const WriteLimiterPtr &
             ErrorCodes::LOGICAL_ERROR);
     }
 
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_edit).Observe(watch.elapsedSeconds());
+    watch.restart();
     try
     {
         auto blob_file = getBlobFile(blob_id);
         blob_file->write(buffer, offset_in_file, all_page_data_size, write_limiter);
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_blob_write).Observe(watch.elapsedSeconds());
     }
     catch (DB::Exception & e)
     {
@@ -457,12 +464,19 @@ void BlobStore<Trait>::remove(const PageEntriesV3 & del_entries)
 template <typename Trait>
 std::pair<BlobFileId, BlobFileOffset> BlobStore<Trait>::getPosFromStats(size_t size)
 {
+    Stopwatch watch;
     BlobStatPtr stat;
 
     auto lock_stat = [size, this, &stat]() {
+        Stopwatch watch_inner;
         auto lock_stats = blob_stats.lock();
         BlobFileId blob_file_id = INVALID_BLOBFILE_ID;
         std::tie(stat, blob_file_id) = blob_stats.chooseStat(size, lock_stats);
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_choose_stat).Observe(watch_inner.elapsedSeconds());
+        watch_inner.restart();
+        SCOPE_EXIT({
+            GET_METRIC(tiflash_storage_page_write_duration_seconds, type_lock_stat).Observe(watch_inner.elapsedSeconds());
+        });
         if (stat == nullptr)
         {
             // No valid stat for putting data with `size`, create a new one
@@ -477,6 +491,12 @@ std::pair<BlobFileId, BlobFileOffset> BlobStore<Trait>::getPosFromStats(size_t s
         // and throwing exception.
         return stat->lock();
     }();
+
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_get_stat_latch).Observe(watch.elapsedSeconds());
+    watch.restart();
+    SCOPE_EXIT({
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_get_pos_from_stat).Observe(watch.elapsedSeconds());
+    });
 
     // We need to assume that this insert will reduce max_cap.
     // Because other threads may also be waiting for BlobStats to chooseStat during this time.

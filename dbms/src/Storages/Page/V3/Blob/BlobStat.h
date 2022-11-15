@@ -53,6 +53,8 @@ public:
 
     struct BlobStat
     {
+        String parent_path;
+
         const BlobFileId id;
         std::atomic<BlobStatType> type;
 
@@ -79,9 +81,14 @@ public:
             , sm_max_caps(sm_max_caps_)
         {}
 
-        [[nodiscard]] std::lock_guard<std::mutex> lock()
+        [[nodiscard]] std::unique_lock<std::mutex> lock()
         {
-            return std::lock_guard(sm_lock);
+            return std::unique_lock(sm_lock);
+        }
+
+        [[nodiscard]] std::unique_lock<std::mutex> defer_lock()
+        {
+            return std::unique_lock(sm_lock, std::defer_lock);
         }
 
         bool isNormal() const
@@ -99,12 +106,12 @@ public:
             type.store(BlobStatType::READ_ONLY);
         }
 
-        BlobFileOffset getPosFromStat(size_t buf_size, const std::lock_guard<std::mutex> &);
+        BlobFileOffset getPosFromStat(size_t buf_size, const std::unique_lock<std::mutex> &);
 
         /**
              * The return value is the valid data size remained in the BlobFile after the remove
              */
-        size_t removePosFromStat(BlobFileOffset offset, size_t buf_size, const std::lock_guard<std::mutex> &);
+        size_t removePosFromStat(BlobFileOffset offset, size_t buf_size, const std::unique_lock<std::mutex> &);
 
         /**
              * This method is only used when blobstore restore
@@ -168,7 +175,7 @@ public:
 
     BlobStatPtr blobIdToStat(BlobFileId file_id, bool ignore_not_exist = false);
 
-    using StatsMap = std::map<String, std::list<BlobStatPtr>>;
+    using StatsMap = std::map<String, std::vector<BlobStatPtr>>;
     StatsMap getStats() const
     {
         auto guard = lock();
@@ -196,7 +203,8 @@ private:
     BlobFileId roll_id = 1;
     // Index for selecting next path for creating new blobfile
     UInt32 stats_map_path_index = 0;
-    std::map<String, std::list<BlobStatPtr>> stats_map;
+    std::map<String, std::vector<BlobStatPtr>> stats_map;
+    std::map<String, UInt32> stats_map_next_index;
 };
 
 } // namespace DB::PS::V3
