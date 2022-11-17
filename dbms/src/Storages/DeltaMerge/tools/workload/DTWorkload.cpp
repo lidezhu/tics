@@ -298,29 +298,18 @@ void DTWorkload::scanAll(ThreadStat & read_stat)
 
 void DTWorkload::run(uint64_t r)
 {
-    std::vector<std::thread> write_threads;
-    for (uint64_t i = 0; i < opts->write_thread_count; i++)
+    std::cout << "begin to create" << std::endl;
+    std::vector<BlockPtr> schemas;
+    for (size_t i = 0; i < 2000000; i++)
     {
-        write_threads.push_back(std::thread(&DTWorkload::write, this, std::ref(stat.write_stats[i])));
+        ColumnsWithTypeAndName column_defines;
+        for (size_t j = 0; j < 200; j++)
+        {
+            auto datatype = std::make_shared<DataTypeString>();
+            column_defines.push_back(ColumnWithTypeAndName{datatype->createColumn(), datatype, fmt::format("column_{}", j)});
+        }
+        schemas.push_back(std::make_shared<Block>(column_defines));
     }
-
-    std::vector<std::thread> read_threads;
-    for (uint64_t i = 0; i < opts->read_thread_count; i++)
-    {
-        read_threads.push_back(std::thread(&DTWorkload::scanAll, this, std::ref(stat.read_stats[i])));
-    }
-
-    for (auto & t : write_threads)
-    {
-        t.join();
-    }
-    for (auto & t : read_threads)
-    {
-        t.join();
-    }
-    if (opts->verification)
-    {
-        verifyHandle(r);
-    }
+    std::cout << "create done" << std::endl;
 }
 } // namespace DB::DM::tests
