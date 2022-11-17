@@ -298,18 +298,6 @@ void DTWorkload::scanAll(ThreadStat & read_stat)
 
 void DTWorkload::run(uint64_t r)
 {
-    std::cout << "begin to create" << std::endl;
-    std::vector<BlockPtr> schemas;
-    for (size_t i = 0; i < 2000000; i++)
-    {
-        ColumnsWithTypeAndName column_defines;
-        for (size_t j = 0; j < 200; j++)
-        {
-            auto datatype = std::make_shared<DataTypeString>();
-            column_defines.push_back(ColumnWithTypeAndName{datatype->createColumn(), datatype, fmt::format("column_{}", j)});
-        }
-        schemas.push_back(std::make_shared<Block>(column_defines));
-    }
-    std::cout << "create done" << std::endl;
+    std::ignore = r;
 }
 } // namespace DB::DM::tests

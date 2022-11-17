@@ -14,6 +14,8 @@
 
 #include <Common/Exception.h>
 #include <Common/Logger.h>
+#include <Core/Block.h>
+#include <DataTypes/DataTypeString.h>
 #include <Storages/DeltaMerge/tools/workload/DTWorkload.h>
 #include <Storages/DeltaMerge/tools/workload/Handle.h>
 #include <Storages/DeltaMerge/tools/workload/Options.h>
@@ -114,32 +116,7 @@ std::shared_ptr<SharedHandleTable> createHandleTable(WorkloadOptions & opts)
 
 void run(WorkloadOptions & opts)
 {
-    auto * log = &Poco::Logger::get("DTWorkload_main");
-    LOG_FMT_INFO(log, "{}", opts.toString());
-    std::vector<Statistics> stats;
-    try
-    {
-        // HandleTable is a unordered_map that stores handle->timestamp for data verified.
-        auto handle_table = createHandleTable(opts);
-        // Table Schema
-        auto table_gen = TableGenerator::create(opts);
-        auto table_info = table_gen->get(opts.table_id, opts.table_name);
-        // In this for loop, destory DeltaMergeStore gracefully and recreate it.
-        for (uint64_t i = 0; i < opts.verify_round; i++)
-        {
-            DTWorkload workload(opts, handle_table, table_info);
-            workload.run(i);
-            stats.push_back(workload.getStat());
-            LOG_FMT_INFO(log, "No.{} Workload {} {}", i, opts.write_key_distribution, stats.back().toStrings());
-        }
-    }
-    catch (...)
-    {
-        DB::tryLogCurrentException("exception thrown");
-        std::abort(); // Finish testing if some error happened.
-    }
-
-    outputResult(log, stats, opts);
+    std::ignore = opts;
 }
 
 void randomKill(WorkloadOptions & opts, pid_t pid)
@@ -256,27 +233,20 @@ int DTWorkload::mainEntry(int argc, char ** argv)
     init(opts);
     TiFlashTestEnv::initializeGlobalContext(opts.work_dirs, opts.enable_ps_v3);
 
-    if (opts.testing_type == "daily_perf")
+    std::cout << "begin to create schema" << std::endl;
+    std::vector<DB::DM::BlockPtr> schemas;
+    for (size_t i = 0; i < 1000000; i++)
     {
-        dailyPerformanceTest(opts);
-    }
-    else if (opts.testing_type == "daily_random")
-    {
-        dailyRandomTest(opts);
-    }
-    else
-    {
-        if (opts.random_kill <= 0)
+        DB::ColumnsWithTypeAndName column_defines;
+        for (size_t j = 0; j < 200; j++)
         {
-            ::run(opts);
+            auto datatype = std::make_shared<DB::DataTypeString>();
+            column_defines.push_back(DB::ColumnWithTypeAndName{datatype->createColumn(), datatype, fmt::format("column_{}", j)});
         }
-        else
-        {
-            // Kill the running DeltaMergeStore could cause data loss, since we don't have raft-log here.
-            // Disable random_kill by default.
-            runAndRandomKill(opts);
-        }
+        schemas.push_back(std::make_shared<DB::Block>(column_defines));
     }
+    std::cout << "create schema done" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000 * 60 * 5));
 
     TiFlashTestEnv::shutdown();
     return 0;
