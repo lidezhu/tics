@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <thread>
+
 #include <Common/FailPoint.h>
 #include <Common/FmtUtils.h>
 #include <Common/Logger.h>
@@ -1536,10 +1538,14 @@ void DeltaMergeStore::checkSegmentUpdate(const DMContextPtr & dm_context, const 
         {
             delta_last_try_compact_column_files = column_file_count;
             const auto & compact_task_num = dm_context->compact_task_per_round;
-            for (size_t i = 0; i < compact_task_num; i++)
-            {
-                try_add_background_task(BackgroundTask{TaskType::Compact, dm_context, segment, {}});
-            }
+            auto do_add_tasks = [&]() {
+                for (size_t i = 0; i < compact_task_num; i++)
+                {
+                    try_add_background_task(BackgroundTask{TaskType::Compact, dm_context, segment, {}});
+                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                }
+            };
+            std::thread(do_add_tasks).detach();
             return true;
         }
         return false;
