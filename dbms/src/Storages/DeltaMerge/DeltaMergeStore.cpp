@@ -1544,7 +1544,11 @@ void DeltaMergeStore::checkSegmentUpdate(const DMContextPtr & dm_context, const 
         if (should_place_delta_index)
         {
             delta_last_try_place_delta_index_rows = delta_rows;
-            try_add_background_task(BackgroundTask{TaskType::PlaceIndex, dm_context, segment, {}});
+            const auto & compact_task_num = dm_context->compact_task_per_round;
+            for (size_t i = 0; i < compact_task_num; i++)
+            {
+                try_add_background_task(BackgroundTask{TaskType::PlaceIndex, dm_context, segment, {}});
+            }
             return true;
         }
         return false;
