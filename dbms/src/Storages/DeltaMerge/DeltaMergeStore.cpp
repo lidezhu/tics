@@ -1541,7 +1541,7 @@ void DeltaMergeStore::checkSegmentUpdate(const DMContextPtr & dm_context, const 
             for (size_t i = 0; i < compact_task_num; i++)
             {
                 try_add_background_task(BackgroundTask{TaskType::Compact, dm_context, segment, {}});
-                if (thread_type == ThreadType::Write)
+                if (i > 0 && i % 10 == 0 && thread_type != ThreadType::Write)
                 {
                     std::this_thread::sleep_for(std::chrono::milliseconds(10));
                 }
