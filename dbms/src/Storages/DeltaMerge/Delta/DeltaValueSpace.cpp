@@ -253,6 +253,12 @@ bool DeltaValueSpace::compact(DMContext & context)
         double seconds_prepare = watch_prepare.elapsedMillisecondsFromLastTime() / 1000.0;
         LOG_FMT_DEBUG(log, "Compact prepare done, cost={:.3f}s, info={}", seconds_prepare, simpleInfo());
         log_storage_snap.reset(); // release the snapshot
+        Stopwatch watch;
+        size_t i = 0;
+        while (watch.elapsedMilliseconds() < 1000)
+        {
+             i++;
+        }
     }
     double seconds_release = watch_prepare.elapsedMillisecondsFromLastTime() / 1000.0;
     GET_METRIC(tiflash_storage_page_snapshot, type_minor_compact_release).Observe(seconds_release);

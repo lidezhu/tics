@@ -1537,23 +1537,7 @@ void DeltaMergeStore::checkSegmentUpdate(const DMContextPtr & dm_context, const 
         if (should_compact)
         {
             delta_last_try_compact_column_files = column_file_count;
-            const auto & compact_task_num = dm_context->compact_task_per_round;
-            for (size_t i = 0; i < compact_task_num; i++)
-            {
-                try_add_background_task(BackgroundTask{TaskType::Compact, dm_context, segment, {}});
-                if (thread_type == ThreadType::BG_Compact)
-                {
-                    if (i > 0 && i % 10 == 0)
-                    {
-                        Stopwatch watch;
-                        while (watch.elapsedMilliseconds() < 10)
-                        {
-
-                        }
-                    }
-                }
-            }
-
+            try_add_background_task(BackgroundTask{TaskType::Compact, dm_context, segment, {}});
             return true;
         }
         return false;
