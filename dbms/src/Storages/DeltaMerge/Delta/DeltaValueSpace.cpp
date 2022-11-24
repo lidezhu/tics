@@ -255,7 +255,7 @@ bool DeltaValueSpace::compact(DMContext & context)
         log_storage_snap.reset(); // release the snapshot
         Stopwatch watch;
         size_t i = 0;
-        while (watch.elapsedMilliseconds() < 1000)
+        while (watch.elapsedMilliseconds() < context.dt_segment_compact_loop_time)
         {
              i++;
         }
