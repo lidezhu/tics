@@ -135,7 +135,7 @@ void ColumnFileTiny::serializeMetadata(WriteBuffer & buf, bool save_schema) cons
 std::tuple<ColumnFilePersistedPtr, BlockPtr> ColumnFileTiny::deserializeMetadata(ReadBuffer & buf, const BlockPtr & last_schema)
 {
     auto schema = deserializeSchema(buf);
-    if (!schema)
+    if (!schema || isSameSchema(*schema, *last_schema))
         schema = last_schema;
     if (unlikely(!schema))
         throw Exception("Cannot deserialize DeltaPackBlock's schema", ErrorCodes::LOGICAL_ERROR);
