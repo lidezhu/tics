@@ -225,6 +225,12 @@ bool DeltaValueSpace::compact(DMContext & context)
             throw Exception(simpleInfo() + " is expected to be updating", ErrorCodes::LOGICAL_ERROR);
     });
     LOG_FMT_DEBUG(log, "Compact start, delta={}", info());
+    Stopwatch watch;
+    size_t i = 0;
+    while (watch.elapsedMilliseconds() < context.dt_segment_compact_loop_time)
+    {
+        i++;
+    }
 
     MinorCompactionPtr compaction_task;
     PageStorage::SnapshotPtr log_storage_snap;
@@ -253,12 +259,6 @@ bool DeltaValueSpace::compact(DMContext & context)
         double seconds_prepare = watch_prepare.elapsedMillisecondsFromLastTime() / 1000.0;
         LOG_FMT_DEBUG(log, "Compact prepare done, cost={:.3f}s, info={}", seconds_prepare, simpleInfo());
         log_storage_snap.reset(); // release the snapshot
-        Stopwatch watch;
-        size_t i = 0;
-        while (watch.elapsedMilliseconds() < context.dt_segment_compact_loop_time)
-        {
-             i++;
-        }
     }
     double seconds_release = watch_prepare.elapsedMillisecondsFromLastTime() / 1000.0;
     GET_METRIC(tiflash_storage_page_snapshot, type_minor_compact_release).Observe(seconds_release);
