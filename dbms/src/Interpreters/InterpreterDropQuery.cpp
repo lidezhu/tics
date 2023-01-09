@@ -143,6 +143,8 @@ BlockIO InterpreterDropQuery::execute()
                     ErrorCodes::TABLE_WAS_NOT_DROPPED);
         }
 
+        auto table_share_lock = table.first->lockForShare("cause dead lock", drop.lock_timeout);
+
         /// If table was already dropped by anyone, an exception will be thrown;
         /// If can not acquire the drop lock on table within `drop.lock_timeout`,
         /// an exception will be thrown;
