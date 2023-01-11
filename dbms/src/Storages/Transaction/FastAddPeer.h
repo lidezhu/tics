@@ -53,7 +53,7 @@ struct FastAddPeerContext::AsyncTasks
     explicit AsyncTasks(uint64_t pool_size)
     {
         // We use a very big queue.
-        thread_pool = std::make_unique<ThreadPool>(pool_size, pool_size, 300);
+        thread_pool = std::make_unique<ThreadPool>(pool_size, pool_size, 3000);
     }
     bool addTask(Key k, Func f);
     bool isScheduled(Key key) const;
