@@ -345,6 +345,10 @@ public:
 
     PageIdSet getAllPageIdsWithPrefix(const String & prefix, const DB::PageStorageSnapshotPtr & snap_);
 
+    PageIdSet getAllPageIdsInRange(const PageId & start, const PageId & end, const DB::PageStorageSnapshotPtr & snap_);
+
+    std::optional<PageId> getLowerBound(const PageId & start, const DB::PageStorageSnapshotPtr & snap_);
+
     void apply(PageEntriesEdit && edit, const WriteLimiterPtr & write_limiter = nullptr);
 
     std::pair<GcEntriesMap, PageSize>
