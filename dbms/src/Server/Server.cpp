@@ -1136,6 +1136,8 @@ int Server::main(const std::vector<std::string> & /*args*/)
 
     global_context->initializeWriteNodePageStorageIfNeed(global_context->getPathPool());
 
+    global_context->initializeFastAddPeerContext();
+
     /// Initialize RateLimiter.
     global_context->initializeRateLimiter(config(), bg_pool, blockable_bg_pool);
 

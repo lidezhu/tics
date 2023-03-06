@@ -73,6 +73,8 @@ class ReadIndexStressTest;
 struct FileUsageStatistics;
 class PathPool;
 class RegionPersister;
+struct CheckpointInfo;
+using CheckpointInfoPtr = std::shared_ptr<CheckpointInfo>;
 
 /// TODO: brief design document.
 class KVStore final : private boost::noncopyable
@@ -118,6 +120,8 @@ public:
      */
     void handleApplySnapshot(metapb::Region && region, uint64_t peer_id, SSTViewVec, uint64_t index, uint64_t term, TMTContext & tmt);
 
+    void handleIngestCheckpoint(CheckpointInfoPtr checkpoint_info, TMTContext & tmt);
+
     std::vector<DM::ExternalDTFileInfo> preHandleSnapshotToFiles(
         RegionPtr new_region,
         SSTViewVec,
@@ -142,6 +146,8 @@ public:
 
     // May return 0 if uninitialized
     StoreID getStoreID(std::memory_order = std::memory_order_relaxed) const;
+
+    metapb::Store getStoreMeta() const;
 
     BatchReadIndexRes batchReadIndex(const std::vector<kvrpcpb::ReadIndexRequest> & req, uint64_t timeout_ms) const;
 
@@ -188,6 +194,7 @@ private:
         Base base;
         std::atomic_uint64_t store_id{0};
         void update(Base &&);
+        Base getMeta() const;
         friend class KVStore;
     };
     StoreMeta & getStore();

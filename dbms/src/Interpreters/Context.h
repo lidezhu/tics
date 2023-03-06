@@ -102,6 +102,8 @@ using MockMPPServerInfo = DB::tests::MockMPPServerInfo;
 class TiFlashSecurityConfig;
 using TiFlashSecurityConfigPtr = std::shared_ptr<TiFlashSecurityConfig>;
 class MockStorage;
+struct FastAddPeerContext;
+using FastAddPeerContextPtr = std::shared_ptr<FastAddPeerContext>;
 
 enum class PageStorageRunMode : UInt8;
 namespace DM
@@ -431,6 +433,9 @@ public:
 
     void initializeWriteNodePageStorageIfNeed(const PathPool & path_pool);
     UniversalPageStoragePtr getWriteNodePageStorage() const;
+
+    void initializeFastAddPeerContext();
+    FastAddPeerContextPtr getFastAddPeerContext() const;
 
     /// Call after initialization before using system logs. Call for global context.
     void initializeSystemLogs();

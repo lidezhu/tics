@@ -34,6 +34,8 @@ namespace DB
 {
 class Logger;
 using LoggerPtr = std::shared_ptr<Logger>;
+struct CheckpointInfo;
+using CheckpointInfoPtr = std::shared_ptr<CheckpointInfo>;
 
 class StoragePathPool;
 
@@ -293,6 +295,19 @@ public:
     {
         auto dm_context = newDMContext(db_context, db_settings);
         return ingestFiles(dm_context, range, external_files, clear_data_in_range);
+    }
+
+    void ingestSegmentsFromCheckpointInfo(const DMContextPtr & dm_context,
+                                         const DM::RowKeyRange & range,
+                                         CheckpointInfoPtr checkpoint_info);
+
+    void ingestSegmentsFromCheckpointInfo(const Context & db_context,
+                                         const DB::Settings & db_settings,
+                                         const DM::RowKeyRange & range,
+                                         CheckpointInfoPtr checkpoint_info)
+    {
+        auto dm_context = newDMContext(db_context, db_settings);
+        return ingestSegmentsFromCheckpointInfo(dm_context, range, checkpoint_info);
     }
 
     /// Read all rows without MVCC filtering

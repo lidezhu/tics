@@ -489,6 +489,11 @@ RegionPtrWithSnapshotFiles::RegionPtrWithSnapshotFiles(
     , external_files(std::move(external_files_))
 {}
 
+RegionPtrWithCheckpointInfo::RegionPtrWithCheckpointInfo(CheckpointInfoPtr checkpoint_info_)
+    : base(checkpoint_info_->region)
+    , checkpoint_info(std::move(checkpoint_info_))
+{}
+
 bool RegionTable::isSafeTSLag(UInt64 region_id, UInt64 * leader_safe_ts, UInt64 * self_safe_ts)
 {
     {

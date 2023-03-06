@@ -688,5 +688,56 @@ void DeltaMergeStore::ingestFiles(
         checkSegmentUpdate(dm_context, segment, ThreadType::Write);
 }
 
+void DeltaMergeStore::ingestSegmentsFromCheckpointInfo(
+    const DMContextPtr & dm_context,
+    const DM::RowKeyRange & range,
+    CheckpointInfoPtr checkpoint_info)
+{
+//    if (unlikely(shutdown_called.load(std::memory_order_relaxed)))
+//    {
+//        const auto msg = fmt::format("Try to ingest files into a shutdown table, store={}", log->identifier());
+//        LOG_WARNING(log, "{}", msg);
+//        throw Exception(msg);
+//    }
+//    LOG_INFO(log, "Ingest checkpoint with manifest path {} data dir {} from store {}", checkpoint_info.checkpoint_manifest_path, checkpoint_info.checkpoint_data_dir, checkpoint_info.checkpoint_store_id);
+//
+//    auto segment_meta_infos = Segment::restoreAllSegmentsMetaInfo(physical_table_id, range, temp_ps, checkpoint_info);
+//    WriteBatches wbs{dm_context->storage_pool};
+//    auto restored_segments = Segment::restoreSegmentsFromCheckpoint( //
+//        log,
+//        *dm_context,
+//        physical_table_id,
+//        segment_meta_infos,
+//        range,
+//        temp_ps,
+//        checkpoint_info,
+//        wbs);
+//    wbs.writeAll();
+//
+//    if (restored_segments.empty())
+//    {
+//        LOG_DEBUG(log, "No segments to ingest.");
+//        return;
+//    }
+//
+//    auto updated_segments = ingestSegmentsUsingSplit(dm_context, range, restored_segments);
+//
+//    for (auto & segment : restored_segments)
+//    {
+//        auto delta = segment->getDelta();
+//        auto stable = segment->getStable();
+//        delta->recordRemoveColumnFilesPages(wbs);
+//        stable->recordRemovePacksPages(wbs);
+//
+//        wbs.removed_meta.delPage(segment->segmentId());
+//        wbs.removed_meta.delPage(delta->getId());
+//        wbs.removed_meta.delPage(stable->getId());
+//        wbs.writeAll();
+//    }
+//
+//    for (auto & segment : updated_segments)
+//        checkSegmentUpdate(dm_context, segment, ThreadType::Write);
+}
+
 } // namespace DM
 } // namespace DB

@@ -64,6 +64,7 @@
 #include <Storages/PathCapacityMetrics.h>
 #include <Storages/PathPool.h>
 #include <Storages/Transaction/BackgroundService.h>
+#include <Storages/Transaction/FastAddPeerContext.h>
 #include <Storages/Transaction/TMTContext.h>
 #include <TableFunctions/TableFunctionFactory.h>
 #include <TiDB/Schema/SchemaSyncService.h>
@@ -168,6 +169,8 @@ struct ContextShared
 
     /// The PS instance available on Write Node.
     UniversalPageStorageServicePtr ps_write;
+
+    FastAddPeerContextPtr fap_context;
 
     TiFlashSecurityConfigPtr security_config;
 
@@ -1734,6 +1737,18 @@ UniversalPageStoragePtr Context::getWriteNodePageStorage() const
     {
         return nullptr;
     }
+}
+
+void Context::initializeFastAddPeerContext()
+{
+    auto lock = getLock();
+    shared->fap_context = std::make_shared<FastAddPeerContext>();
+}
+
+FastAddPeerContextPtr Context::getFastAddPeerContext() const
+{
+    auto lock = getLock();
+    return shared->fap_context;
 }
 
 UInt16 Context::getTCPPort() const

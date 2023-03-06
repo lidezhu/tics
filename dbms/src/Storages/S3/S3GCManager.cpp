@@ -361,7 +361,7 @@ void S3GCManager::physicalRemoveDataFile(const String & datafile_key)
     LOG_INFO(log, "datafile deleted, key={}", datafile_key);
 }
 
-std::vector<UInt64> S3GCManager::getAllStoreIds() const
+std::vector<UInt64> S3GCManager::getAllStoreIds(std::shared_ptr<S3::TiFlashS3Client> client)
 {
     std::vector<UInt64> all_store_ids;
     // The store key are "s${store_id}/", we need setting delimiter "/" to get the

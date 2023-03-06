@@ -833,6 +833,11 @@ StoreID KVStore::getStoreID(std::memory_order memory_order) const
     return getStore().store_id.load(memory_order);
 }
 
+metapb::Store KVStore::getStoreMeta() const
+{
+    return getStore().getMeta();
+}
+
 KVStore::StoreMeta & KVStore::getStore()
 {
     return this->store;
@@ -847,6 +852,12 @@ void KVStore::StoreMeta::update(Base && base_)
 {
     base = std::move(base_);
     store_id = base.id();
+}
+
+KVStore::StoreMeta::Base KVStore::StoreMeta::getMeta() const
+{
+    std::lock_guard lock(mu);
+    return base;
 }
 
 KVStore::~KVStore()

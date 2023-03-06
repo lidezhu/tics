@@ -120,7 +120,7 @@ public:
 
     void physicalRemoveDataFile(const String & datafile_key);
 
-    std::vector<UInt64> getAllStoreIds() const;
+    static std::vector<UInt64> getAllStoreIds(std::shared_ptr<S3::TiFlashS3Client> client);
 
     std::unordered_set<String> getValidLocksFromManifest(const String & manifest_key);
 
