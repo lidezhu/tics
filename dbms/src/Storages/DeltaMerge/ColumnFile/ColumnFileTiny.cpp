@@ -20,6 +20,7 @@
 #include <Storages/DeltaMerge/DMContext.h>
 #include <Storages/DeltaMerge/WriteBatchesImpl.h>
 #include <Storages/DeltaMerge/convertColumnTypeHelpers.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
 
 #include <memory>
 
@@ -171,6 +172,30 @@ ColumnFilePersistedPtr ColumnFileTiny::deserializeMetadata(const DMContext & con
     readIntBinary(bytes, buf);
 
     return std::make_shared<ColumnFileTiny>(schema, rows, bytes, data_page_id);
+}
+
+std::tuple<ColumnFilePersistedPtr, BlockPtr> ColumnFileTiny::createFromCheckpoint(const DMContext & context, ReadBuffer & buf, UniversalPageStoragePtr temp_ps, const BlockPtr & last_schema, TableID ns_id, WriteBatches & wbs)
+{
+    auto schema = deserializeSchema(buf);
+    if (!schema)
+        schema = last_schema;
+    RUNTIME_CHECK(schema != nullptr);
+
+    PageIdU64 data_page_id;
+    size_t rows, bytes;
+
+    readIntBinary(data_page_id, buf);
+    readIntBinary(rows, buf);
+    readIntBinary(bytes, buf);
+    auto new_cf_id = context.storage_pool->newLogPageId();
+    auto remote_page_id = UniversalPageIdFormat::toFullPageId(UniversalPageIdFormat::toFullPrefix(StorageType::Log, ns_id), data_page_id);
+    auto remote_data_location = temp_ps->getCheckpointLocation(remote_page_id);
+    RUNTIME_CHECK(remote_data_location.has_value());
+    PageFieldOffsetChecksums offset_and_checksums{}; // FIXME: fix it
+    wbs.log.putRemotePage(new_cf_id, 0, *remote_data_location, std::move(offset_and_checksums));
+
+    auto column_file_schema = std::make_shared<ColumnFileSchema>(*schema);
+    return {std::make_shared<ColumnFileTiny>(column_file_schema, rows, bytes, new_cf_id), std::move(schema)};
 }
 
 Block ColumnFileTiny::readBlockForMinorCompaction(const PageReader & page_reader) const

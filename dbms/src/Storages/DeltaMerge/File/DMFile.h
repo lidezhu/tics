@@ -224,7 +224,7 @@ public:
 
     // Normally, we use STORAGE_FORMAT_CURRENT to determine whether use meta v2.
     static DMFilePtr
-    create(UInt64 file_id, const String & parent_path, DMConfigurationOpt configuration = std::nullopt, DMFileFormat::Version = STORAGE_FORMAT_CURRENT.dm_file);
+    create(UInt64 file_id, const String & parent_path, DMConfigurationOpt configuration = std::nullopt, DMFileFormat::Version = DMFileFormat::V3);
 
     static DMFilePtr restore(
         const FileProviderPtr & file_provider,

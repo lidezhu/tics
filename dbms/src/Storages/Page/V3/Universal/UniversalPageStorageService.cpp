@@ -97,18 +97,11 @@ UniversalPageStorageService::createForTest(
     return service;
 }
 
-struct CheckpointUploadFunctor
+bool CheckpointUploadFunctor::operator()(const PS::V3::LocalCheckpointFiles & checkpoint) const
 {
-    const StoreID store_id;
-    const UInt64 sequence;
-    const DM::Remote::IDataStorePtr remote_store;
-
-    bool operator()(const PS::V3::LocalCheckpointFiles & checkpoint) const
-    {
-        // Persist checkpoint to remote_source
-        return remote_store->putCheckpointFiles(checkpoint, store_id, sequence);
-    }
-};
+    // Persist checkpoint to remote_source
+    return remote_store->putCheckpointFiles(checkpoint, store_id, sequence);
+}
 
 bool UniversalPageStorageService::uploadCheckpoint()
 {

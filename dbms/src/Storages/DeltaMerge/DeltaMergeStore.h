@@ -26,6 +26,7 @@
 #include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/ScanContext.h>
 #include <Storages/DeltaMerge/SegmentReadTaskPool.h>
+#include <Storages/DeltaMerge/ColumnFile/ColumnFilePersisted.h>
 #include <Storages/Page/PageStorage_fwd.h>
 #include <Storages/Transaction/DecodingStorageSchemaSnapshot.h>
 #include <Storages/Transaction/TiDB.h>
@@ -37,6 +38,8 @@ namespace DB
 
 class Logger;
 using LoggerPtr = std::shared_ptr<Logger>;
+struct CheckpointInfo;
+using CheckpointInfoPtr = std::shared_ptr<CheckpointInfo>;
 
 class StoragePathPool;
 
@@ -296,6 +299,29 @@ public:
     {
         auto dm_context = newDMContext(db_context, db_settings);
         return ingestFiles(dm_context, range, external_files, clear_data_in_range);
+    }
+
+    std::vector<SegmentPtr> ingestSegmentsUsingSplit(
+        const DMContextPtr & dm_context,
+        const RowKeyRange & ingest_range,
+        const std::vector<SegmentPtr> & target_segments);
+
+    bool ingestSegmentDataIntoSegmentUsingSplit(
+        DMContext & dm_context,
+        const SegmentPtr & segment,
+        const SegmentPtr & target_segment);
+
+    void ingestSegmentsFromCheckpointInfo(const DMContextPtr & dm_context,
+                                         const DM::RowKeyRange & range,
+                                         CheckpointInfoPtr checkpoint_info);
+
+    void ingestSegmentsFromCheckpointInfo(const Context & db_context,
+                                         const DB::Settings & db_settings,
+                                         const DM::RowKeyRange & range,
+                                         CheckpointInfoPtr checkpoint_info)
+    {
+        auto dm_context = newDMContext(db_context, db_settings);
+        return ingestSegmentsFromCheckpointInfo(dm_context, range, checkpoint_info);
     }
 
     /// Read all rows without MVCC filtering
@@ -571,6 +597,13 @@ private:
         const SegmentPtr & segment,
         const DMFilePtr & data_file,
         bool clear_all_data_in_segment);
+
+    // TODO: recover the comment about this function
+    SegmentPtr segmentDangerouslyReplaceData(
+        DMContext & dm_context,
+        const SegmentPtr & segment,
+        const DMFilePtr & data_file,
+        const ColumnFilePersisteds & column_file_persisteds);
 
     // isSegmentValid should be protected by lock on `read_write_mutex`
     bool isSegmentValid(const std::shared_lock<std::shared_mutex> &, const SegmentPtr & segment)

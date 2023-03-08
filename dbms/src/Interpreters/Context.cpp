@@ -68,6 +68,7 @@
 #include <Storages/PathPool.h>
 #include <Storages/S3/S3Common.h>
 #include <Storages/Transaction/BackgroundService.h>
+#include <Storages/Transaction/FastAddPeerContext.h>
 #include <Storages/Transaction/TMTContext.h>
 #include <TableFunctions/TableFunctionFactory.h>
 #include <TiDB/Schema/SchemaSyncService.h>
@@ -180,6 +181,8 @@ struct ContextShared
     UniversalPageStorageServicePtr ps_rn_page_cache;
     /// The page cache in Read Node. It uses ps_rn_page_cache as storage to cache page data to local disk based on the LRU mechanism.
     DB::DM::Remote::RNLocalPageCachePtr rn_page_cache;
+
+    FastAddPeerContextPtr fap_context;
 
     TiFlashSecurityConfigPtr security_config;
 
@@ -1820,6 +1823,18 @@ DM::Remote::RNLocalPageCachePtr Context::getReadNodePageCache() const
     auto lock = getLock();
     RUNTIME_CHECK(shared->rn_page_cache != nullptr);
     return shared->rn_page_cache;
+}
+
+void Context::initializeFastAddPeerContext()
+{
+    auto lock = getLock();
+    shared->fap_context = std::make_shared<FastAddPeerContext>();
+}
+
+FastAddPeerContextPtr Context::getFastAddPeerContext() const
+{
+    auto lock = getLock();
+    return shared->fap_context;
 }
 
 UInt16 Context::getTCPPort() const

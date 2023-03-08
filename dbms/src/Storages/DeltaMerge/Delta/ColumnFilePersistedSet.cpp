@@ -21,6 +21,8 @@
 #include <Storages/DeltaMerge/DeltaIndexManager.h>
 #include <Storages/DeltaMerge/WriteBatchesImpl.h>
 #include <Storages/PathPool.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
+
 
 #include <ext/scope_guard.h>
 
@@ -94,6 +96,33 @@ ColumnFilePersistedSetPtr ColumnFilePersistedSet::restore( //
     ReadBufferFromMemory buf(page.data.begin(), page.data.size());
     auto column_files = deserializeSavedColumnFiles(context, segment_range, buf);
     return std::make_shared<ColumnFilePersistedSet>(id, column_files);
+}
+
+ColumnFilePersistedSetPtr ColumnFilePersistedSet::createFromCheckpoint( //
+    DMContext & context,
+    UniversalPageStoragePtr temp_ps,
+    const RowKeyRange & segment_range,
+    UInt64 remote_store_id,
+    NamespaceId ns_id,
+    PageIdU64 src_delta_id,
+    WriteBatches & wbs)
+{
+    auto & storage_pool = context.storage_pool;
+    auto full_src_delta_id = UniversalPageIdFormat::toFullPageId(UniversalPageIdFormat::toFullPrefix(StorageType::Meta, ns_id), src_delta_id);
+    auto meta_page = temp_ps->read(full_src_delta_id);
+    ReadBufferFromMemory meta_buf(meta_page.data.begin(), meta_page.data.size());
+    auto column_files = createColumnFilesFromCheckpoint(
+        context,
+        segment_range,
+        meta_buf,
+        temp_ps,
+        remote_store_id,
+        ns_id,
+        wbs);
+    auto new_delta_id = storage_pool->newMetaPageId();
+    auto new_persisted_set = std::make_shared<ColumnFilePersistedSet>(new_delta_id, column_files);
+    new_persisted_set->saveMeta(wbs);
+    return new_persisted_set;
 }
 
 void ColumnFilePersistedSet::saveMeta(WriteBatches & wbs) const

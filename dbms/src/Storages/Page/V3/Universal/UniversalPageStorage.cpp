@@ -294,6 +294,33 @@ DB::PageEntry UniversalPageStorage::getEntry(const UniversalPageId & page_id, Sn
     }
 }
 
+std::optional<DB::PS::V3::CheckpointLocation> UniversalPageStorage::getCheckpointLocation(const UniversalPageId & page_id, SnapshotPtr snapshot) const
+{
+    if (!snapshot)
+    {
+        snapshot = this->getSnapshot("");
+    }
+
+    try
+    {
+        const auto & [id, entry] = page_directory->getByIDOrNull(page_id, snapshot);
+        (void)id;
+        if (entry.checkpoint_info.has_value())
+        {
+            return entry.checkpoint_info->data_location;
+        }
+        else
+        {
+            return std::nullopt;
+        }
+    }
+    catch (DB::Exception & e)
+    {
+        LOG_WARNING(log, "{}", e.message());
+        return std::nullopt;
+    }
+}
+
 PageIdU64 UniversalPageStorage::getMaxIdAfterRestart() const
 {
     return page_directory->getMaxIdAfterRestart();

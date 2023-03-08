@@ -29,6 +29,10 @@
 #include <Storages/tests/TiFlashStorageTestBasic.h>
 #include <TestUtils/FunctionTestUtils.h>
 #include <TestUtils/TiFlashTestBasic.h>
+#include <aws/s3/S3Client.h>
+#include <aws/s3/model/CreateBucketRequest.h>
+#include <aws/s3/model/DeleteBucketRequest.h>
+#include <Storages/S3/S3Common.h>
 
 namespace DB
 {
@@ -123,6 +127,7 @@ public:
     void SetUp() override
     {
         TiFlashStorageTestBasic::SetUp();
+        ASSERT_TRUE(createBucketIfNotExist());
         store = reload();
     }
 
@@ -173,6 +178,30 @@ public:
         auto handle_range = RowKeyRange::fromHandleRange(range);
         auto external_file = ExternalDTFileInfo{.id = file_id, .range = handle_range};
         return {handle_range, {external_file}}; // There are some duplicated info. This is to minimize the change to our test code.
+    }
+
+protected:
+    bool createBucketIfNotExist()
+    {
+        auto s3_client = S3::ClientFactory::instance().sharedClient();
+        auto bucket = S3::ClientFactory::instance().bucket();
+        Aws::S3::Model::CreateBucketRequest request;
+        request.SetBucket(bucket);
+        auto outcome = s3_client->CreateBucket(request);
+        if (outcome.IsSuccess())
+        {
+            LOG_DEBUG(Logger::get(), "Created bucket {}", bucket);
+        }
+        else if (outcome.GetError().GetExceptionName() == "BucketAlreadyOwnedByYou")
+        {
+            LOG_DEBUG(Logger::get(), "Bucket {} already exist", bucket);
+        }
+        else
+        {
+            const auto & err = outcome.GetError();
+            LOG_ERROR(Logger::get(), "CreateBucket: {}:{}", err.GetExceptionName(), err.GetMessage());
+        }
+        return outcome.IsSuccess() || outcome.GetError().GetExceptionName() == "BucketAlreadyOwnedByYou";
     }
 
 protected:

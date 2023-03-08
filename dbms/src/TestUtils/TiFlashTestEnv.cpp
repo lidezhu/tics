@@ -141,6 +141,7 @@ void TiFlashTestEnv::addGlobalContext(const DB::Settings & settings_, Strings te
     global_context->setPageStorageRunMode(ps_run_mode);
     global_context->initializeGlobalStoragePoolIfNeed(global_context->getPathPool());
     global_context->initializeWriteNodePageStorageIfNeed(global_context->getPathPool());
+    global_context->initializeRemoteDataStore(global_context->getFileProvider(), true);
     LOG_INFO(Logger::get(), "Storage mode : {}", static_cast<UInt8>(global_context->getPageStorageRunMode()));
 
     TiFlashRaftConfig raft_config;
