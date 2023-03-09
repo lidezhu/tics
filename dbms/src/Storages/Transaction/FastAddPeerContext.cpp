@@ -112,7 +112,7 @@ UniversalPageStoragePtr createTempPageStorage(Context & context, const String & 
 
 
     UniversalWriteBatch wb;
-    wb.disableRemoteWrite();
+    wb.disableRemoteLock();
     // insert delete records at last
     PS::V3::PageEntriesEdit<UniversalPageId>::EditRecords ref_records;
     PS::V3::PageEntriesEdit<UniversalPageId>::EditRecords delete_records;
@@ -144,8 +144,7 @@ UniversalPageStoragePtr createTempPageStorage(Context & context, const String & 
         }
         else
         {
-            std::cout << "Unknown record type" << std::endl;
-            RUNTIME_CHECK_MSG(false, fmt::format("Unknown record type {}", typeToString(record.type)));
+            RUNTIME_CHECK(false);
         }
     }
     for (const auto & record : ref_records)

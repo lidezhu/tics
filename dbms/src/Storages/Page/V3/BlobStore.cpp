@@ -325,7 +325,6 @@ BlobStore<Trait>::write(typename Trait::WriteBatch && wb, const WriteLimiterPtr 
             }
             case WriteBatchWriteType::PUT_EXTERNAL:
             {
-<<<<<<< HEAD
                 PageEntryV3 entry;
                 if (write.data_location.has_value())
                 {

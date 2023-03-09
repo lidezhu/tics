@@ -3039,7 +3039,6 @@ try
     }
     UInt64 store_id = TiFlashTestEnv::getStoreId();
 
-
     {
         auto table_column_defines = DMTestEnv::getDefaultColumns();
 
