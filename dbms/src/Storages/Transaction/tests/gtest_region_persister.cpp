@@ -226,13 +226,13 @@ public:
             /*kvstore_paths=*/Strings{},
             path_capacity,
             provider);
-        global_ctx.initializeWriteNodePageStorageIfNeed(*mocked_path_pool);
+        global_ctx.initializeWriteNodePageStorageIfNeed(*mocked_path_pool, true);
     }
 
     void reload()
     {
         auto & global_ctx = DB::tests::TiFlashTestEnv::getGlobalContext();
-        global_ctx.initializeWriteNodePageStorageIfNeed(*mocked_path_pool);
+        global_ctx.initializeWriteNodePageStorageIfNeed(*mocked_path_pool, true);
     }
 
     void TearDown() override

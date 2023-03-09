@@ -96,6 +96,8 @@ public:
 
     static void deleteBucket(Aws::S3::S3Client & s3_client, const String & bucket);
 
+    static UInt64 getStoreId();
+
     TiFlashTestEnv() = delete;
 
 private:

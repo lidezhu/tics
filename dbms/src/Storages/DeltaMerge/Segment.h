@@ -142,6 +142,36 @@ public:
 
     static SegmentPtr restoreSegment(const LoggerPtr & parent_log, DMContext & context, PageIdU64 segment_id);
 
+    struct SegmentMetaInfo
+    {
+        SegmentFormat::Version version;
+        UInt64 epoch;
+        RowKeyRange range;
+        PageIdU64 next_segment_id;
+        PageIdU64 delta_id;
+        PageIdU64 stable_id;
+    };
+
+    // restore all segments' meta info in target_range
+    using SegmentMetaInfos = std::vector<SegmentMetaInfo>;
+    static SegmentMetaInfos readAllSegmentsMetaInfoInRange( //
+        NamespaceId ns_id,
+        const RowKeyRange & target_range,
+        UniversalPageStoragePtr temp_ps);
+
+    // TODO: use template for CheckpointPageManager
+    // 1. The returned segment's range should be in `range`. Actually, Just change the range in segment meta is enough.
+    // 2. Segment meta should not be write in wbs.
+    static Segments createTargetSegmentsFromCheckpoint( //
+        const LoggerPtr & parent_log,
+        DMContext & context,
+        UInt64 remote_store_id,
+        NamespaceId ns_id,
+        const Segment::SegmentMetaInfos & meta_infos,
+        const RowKeyRange & range,
+        UniversalPageStoragePtr temp_ps,
+        WriteBatches & wbs);
+
     void serialize(WriteBatchWrapper & wb);
 
     /// Attach a new ColumnFile into the Segment. The ColumnFile will be added to MemFileSet and flushed to disk later.
@@ -436,6 +466,8 @@ public:
      *         to the PageStorage's data.
      */
     [[nodiscard]] SegmentPtr replaceData(const Lock &, DMContext & dm_context, const DMFilePtr & data_file, SegmentSnapshotPtr segment_snap_opt = nullptr) const;
+
+    [[nodiscard]] SegmentPtr dangerouslyReplaceData(const Lock &, DMContext & dm_context, const DMFilePtr & data_file, WriteBatches & wbs, const ColumnFilePersisteds & column_file_persisteds) const;
 
     [[nodiscard]] SegmentPtr dropNextSegment(WriteBatches & wbs, const RowKeyRange & next_segment_range);
 

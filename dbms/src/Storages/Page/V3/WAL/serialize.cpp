@@ -273,6 +273,7 @@ void deserializePutExternalFrom([[maybe_unused]] const EditRecordType record_typ
     }
     deserializeVersionFrom(buf, rec.version);
     readIntBinary(rec.being_ref_count, buf);
+
     if constexpr (std::is_same_v<typename EditType::PageId, UniversalPageId>)
     {
         UInt64 has_checkpoint_info = 0;

@@ -88,6 +88,14 @@ public:
                                                       const RowKeyRange & segment_range,
                                                       ReadBuffer & buf);
 
+    static ColumnFilePersistedPtr createFromCheckpoint(DMContext & context, //
+                                                                const RowKeyRange & segment_range,
+                                                                ReadBuffer & buf,
+                                                                UniversalPageStoragePtr temp_ps,
+                                                                UInt64 remote_store_id,
+                                                                TableID ns_id,
+                                                                WriteBatches & wbs);
+
     String toString() const override
     {
         String s = "{big_file,rows:" + DB::toString(getRows()) //
