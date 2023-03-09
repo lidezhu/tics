@@ -29,6 +29,14 @@
 #include <Storages/tests/TiFlashStorageTestBasic.h>
 #include <TestUtils/FunctionTestUtils.h>
 #include <TestUtils/TiFlashTestBasic.h>
+#include <aws/s3/S3Client.h>
+#include <aws/s3/model/CreateBucketRequest.h>
+#include <aws/s3/model/DeleteBucketRequest.h>
+#include <Storages/S3/S3Common.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
+#include "Flash/Disaggregated/MockS3LockClient.h"
+#include <Storages/Transaction/TMTContext.h>
+#include <Storages/Transaction/KVStore.h>
 
 namespace DB
 {
@@ -122,7 +130,19 @@ public:
 
     void SetUp() override
     {
+        ASSERT_TRUE(createBucketIfNotExist());
         TiFlashStorageTestBasic::SetUp();
+        if (auto ps =  DB::tests::TiFlashTestEnv::getGlobalContext().getWriteNodePageStorage(); ps)
+        {
+            auto mock_s3lock_client = std::make_shared<DB::S3::MockS3LockClient>(DB::S3::ClientFactory::instance().sharedTiFlashClient());
+            ps->initLocksLocalManager(DB::tests::TiFlashTestEnv::getStoreId(), mock_s3lock_client);
+        }
+        auto kvstore = db_context->getTMTContext().getKVStore();
+        {
+            auto meta_store = metapb::Store{};
+            meta_store.set_id(DB::tests::TiFlashTestEnv::getStoreId());
+            kvstore->setStore(meta_store);
+        }
         store = reload();
     }
 
@@ -173,6 +193,30 @@ public:
         auto handle_range = RowKeyRange::fromHandleRange(range);
         auto external_file = ExternalDTFileInfo{.id = file_id, .range = handle_range};
         return {handle_range, {external_file}}; // There are some duplicated info. This is to minimize the change to our test code.
+    }
+
+protected:
+    bool createBucketIfNotExist()
+    {
+        auto s3_client = S3::ClientFactory::instance().sharedClient();
+        auto bucket = S3::ClientFactory::instance().bucket();
+        Aws::S3::Model::CreateBucketRequest request;
+        request.SetBucket(bucket);
+        auto outcome = s3_client->CreateBucket(request);
+        if (outcome.IsSuccess())
+        {
+            LOG_DEBUG(Logger::get(), "Created bucket {}", bucket);
+        }
+        else if (outcome.GetError().GetExceptionName() == "BucketAlreadyOwnedByYou")
+        {
+            LOG_DEBUG(Logger::get(), "Bucket {} already exist", bucket);
+        }
+        else
+        {
+            const auto & err = outcome.GetError();
+            LOG_ERROR(Logger::get(), "CreateBucket: {}:{}", err.GetExceptionName(), err.GetMessage());
+        }
+        return outcome.IsSuccess() || outcome.GetError().GetExceptionName() == "BucketAlreadyOwnedByYou";
     }
 
 protected:

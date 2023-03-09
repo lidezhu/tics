@@ -23,11 +23,19 @@
 #include <Storages/DeltaMerge/Filter/RSOperator.h>
 #include <Storages/DeltaMerge/PKSquashingBlockInputStream.h>
 #include <Storages/DeltaMerge/ReadThread/UnorderedInputStream.h>
+#include <Storages/DeltaMerge/Remote/DataStore/DataStoreS3.h>
 #include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/StoragePool.h>
 #include <Storages/DeltaMerge/tests/DMTestEnv.h>
 #include <Storages/DeltaMerge/tests/gtest_dm_delta_merge_store_test_basic.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorageService.h>
 #include <Storages/PathPool.h>
+#include <Storages/S3/CheckpointManifestS3Set.h>
+#include <Storages/Transaction/CheckpointInfo.h>
+#include <Storages/Transaction/TMTContext.h>
+#include <Storages/Transaction/KVStore.h>
+#include <Storages/Transaction/FastAddPeerContext.h>
 #include <TestUtils/FunctionTestUtils.h>
 #include <TestUtils/InputStreamTestUtils.h>
 #include <TestUtils/TiFlashTestEnv.h>
@@ -39,6 +47,8 @@
 #include <future>
 #include <iterator>
 #include <random>
+
+#include "Flash/Disaggregated/MockS3LockClient.h"
 
 namespace DB
 {
@@ -3018,6 +3028,304 @@ try
     }
 }
 CATCH
+
+TEST_P(DeltaMergeStoreRWTest, SimpleWriteReadAfterRestoreFromCheckPoint)
+try
+{
+    // This test only support delta version 3
+    if (mode == TestMode::V1_BlockOnly)
+    {
+        return;
+    }
+    UInt64 store_id = TiFlashTestEnv::getStoreId();
+
+    {
+        auto table_column_defines = DMTestEnv::getDefaultColumns();
+
+        store = reload(table_column_defines);
+    }
+
+    const size_t num_rows_write = 128;
+//    {
+//        // write to store
+//        Block block = DMTestEnv::prepareSimpleWriteBlock(0, num_rows_write, false);
+//        store->write(*db_context, db_context->getSettingsRef(), block);
+//        store->flushCache(*db_context, RowKeyRange::newAll(false, 1), true);
+//        store->mergeDeltaAll(*db_context);
+//    }
+
+    // write ColumnFileDeleteRange
+    {
+        HandleRange handle_range(0, num_rows_write / 2);
+        store->deleteRange(*db_context, db_context->getSettingsRef(), RowKeyRange::fromHandleRange(handle_range));
+        store->flushCache(*db_context, RowKeyRange::newAll(false, 1), true);
+    }
+
+
+    auto temp_dir = getTemporaryPath() + "/";
+    {
+        auto page_storage = db_context->getWriteNodePageStorage();
+        auto wi = PS::V3::CheckpointProto::WriterInfo();
+        {
+            wi.set_store_id(store_id);
+        }
+
+        UInt64 upload_sequence = 1000;
+        auto remote_store = db_context->getRemoteDataStore();
+        assert(remote_store != nullptr);
+        UniversalPageStorage::DumpCheckpointOptions opts{
+            .data_file_id_pattern = S3::S3Filename::newCheckpointDataNameTemplate(store_id, upload_sequence),
+            .data_file_path_pattern = temp_dir + "dat_{seq}_{index}",
+            .manifest_file_id_pattern = S3::S3Filename::newCheckpointManifestNameTemplate(store_id),
+            .manifest_file_path_pattern = temp_dir + "mf_{seq}",
+            .writer_info = wi,
+            .must_locked_files = {},
+            .persist_checkpoint = CheckpointUploadFunctor{
+                .store_id = store_id,
+                // Note that we use `upload_sequence` but not `snapshot.sequence` for
+                // the S3 key.
+                .sequence = upload_sequence,
+                .remote_store = remote_store,
+            },
+            .override_sequence = upload_sequence, // override by upload_sequence
+        };
+        page_storage->dumpIncrementalCheckpoint(opts);
+    }
+
+    {
+        // clear data
+        store->clearData();
+        auto table_column_defines = DMTestEnv::getDefaultColumns();
+        store = reload(table_column_defines);
+        store->deleteRange(*db_context, db_context->getSettingsRef(), RowKeyRange::newAll(false, 1));
+        store->flushCache(*db_context, RowKeyRange::newAll(false, 1), true);
+    }
+
+    {
+        const auto & columns = store->getTableColumns();
+        BlockInputStreamPtr in = store->read(*db_context,
+                                             db_context->getSettingsRef(),
+                                             columns,
+                                             {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+                                             /* num_streams= */ 1,
+                                             /* max_version= */ std::numeric_limits<UInt64>::max(),
+                                             EMPTY_FILTER,
+                                             TRACING_NAME,
+                                             /* keep_order= */ false,
+                                             /* is_fast_scan= */ false,
+                                             /* expected_block_size= */ 1024)[0];
+        ASSERT_INPUTSTREAM_NROWS(in, 0);
+    }
+
+    auto s3_client = S3::ClientFactory::instance().sharedClient();
+    auto bucket = S3::ClientFactory::instance().bucket();
+    const auto manifests = S3::CheckpointManifestS3Set::getFromS3(*s3_client, bucket, store_id);
+    ASSERT_TRUE(!manifests.empty());
+    const auto & latest_manifest_key = manifests.latestManifestKey();
+
+    auto checkpoint_info = std::make_shared<CheckpointInfo>();
+    checkpoint_info->remote_store_id = store_id;
+    checkpoint_info->temp_ps = createTempPageStorage(*db_context, latest_manifest_key);
+    store->ingestSegmentsFromCheckpointInfo(*db_context, db_context->getSettingsRef(), RowKeyRange::newAll(false, 1), checkpoint_info);
+
+//    {
+//        const auto & columns = store->getTableColumns();
+//        BlockInputStreamPtr in = store->read(*db_context,
+//                                             db_context->getSettingsRef(),
+//                                             columns,
+//                                             {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+//                                             /* num_streams= */ 1,
+//                                             /* max_version= */ std::numeric_limits<UInt64>::max(),
+//                                             EMPTY_FILTER,
+//                                             TRACING_NAME,
+//                                             /* keep_order= */ false,
+//                                             /* is_fast_scan= */ false,
+//                                             /* expected_block_size= */ 1024)[0];
+//        ASSERT_INPUTSTREAM_NROWS(in, num_rows_write / 2);
+//    }
+}
+CATCH
+
+//TEST_P(DeltaMergeStoreRWTest, SimpleWriteReadAfterRestoreFromCheckPointWithSplit)
+//try
+//{
+//    // This test only support delta version 3
+//    if (mode == TestMode::V1_BlockOnly)
+//    {
+//        return;
+//    }
+//    auto & global_settings = TiFlashTestEnv::getGlobalContext().getSettingsRef();
+//    // store the old value to restore global_context settings after the test finish to avoid influence other tests
+//    auto old_global_settings = global_settings;
+//
+//    // change the settings to make it more easy to trigger splitting segments
+//    Settings settings;
+//    settings.dt_segment_limit_rows = 11;
+//    settings.dt_segment_limit_size = 20;
+//    settings.dt_segment_delta_limit_rows = 7;
+//    settings.dt_segment_delta_limit_size = 20;
+//    settings.dt_segment_force_split_size = 100;
+//    settings.dt_segment_delta_cache_limit_size = 20;
+//
+//    // we need change the settings in both the ctx we get just below and the global_context above.
+//    // because when processing write request, `DeltaMergeStore` will call `checkSegmentUpdate` with the context we just get below.
+//    // and when initialize `DeltaMergeStore`, it will call `checkSegmentUpdate` with the global_context above.
+//    // so we need to make the settings in these two contexts consistent.
+//    global_settings = settings;
+//    auto old_db_context = std::move(db_context);
+//    db_context = std::make_unique<Context>(DMTestEnv::getContext(settings));
+//    SCOPE_EXIT({
+//        global_settings = old_global_settings;
+//        db_context = std::move(old_db_context);
+//    });
+//    {
+//        auto table_column_defines = DMTestEnv::getDefaultColumns();
+//
+//        store = reload(table_column_defines);
+//    }
+//
+//    size_t num_rows_write = 0;
+//    size_t num_rows_write_per_batch = 128;
+//    // write until split and use a big enough finite for loop to make sure the test won't hang forever
+//    for (size_t i = 0; i < 100000; i++)
+//    {
+//        // write to store
+//        Block block = DMTestEnv::prepareSimpleWriteBlock(num_rows_write, num_rows_write + num_rows_write_per_batch, false);
+//        store->write(*db_context, settings, block);
+//        store->flushCache(*db_context, RowKeyRange::newAll(false, 1), true);
+//        num_rows_write += num_rows_write_per_batch;
+//        if (store->getSegmentsStats().size() > 1)
+//            break;
+//    }
+//    {
+//        ASSERT_GT(store->getSegmentsStats().size(), 1);
+//    }
+//    //    store->mergeDeltaAll(*db_context);
+//
+//    // dump checkpoint
+//    auto page_storage = db_context->getWriteNodePageStorage();
+//    auto writer_info = std::make_shared<WriterInfo>();
+//    auto checkpoint_dir = getTemporaryPath() + "/";
+//    page_storage->page_directory->dumpRemoteCheckpoint(PageDirectory<PageDirectoryTrait>::DumpRemoteCheckpointOptions<BlobStoreTrait>{
+//        .temp_directory = checkpoint_dir + "temp/",
+//        .remote_directory = checkpoint_dir,
+//        .data_file_name_pattern = "{sequence}_{sub_file_index}.data",
+//        .manifest_file_name_pattern = "{sequence}.manifest",
+//        .writer_info = writer_info,
+//        .blob_store = *page_storage->blob_store,
+//    });
+//
+//    UInt64 latest_manifest_sequence = 0;
+//    Poco::DirectoryIterator it(checkpoint_dir);
+//    Poco::DirectoryIterator end;
+//    while (it != end)
+//    {
+//        if (it->isFile())
+//        {
+//            const Poco::Path & file_path = it->path();
+//            if (file_path.getExtension() == "manifest")
+//            {
+//                auto current_manifest_sequence = UInt64(std::stoul(file_path.getBaseName()));
+//                latest_manifest_sequence = std::max(current_manifest_sequence, latest_manifest_sequence);
+//            }
+//        }
+//        ++it;
+//    }
+//    ASSERT_TRUE(latest_manifest_sequence > 0);
+//    auto checkpoint_path = checkpoint_dir + fmt::format("{}.manifest", latest_manifest_sequence);
+//
+//    {
+//        const auto & columns = store->getTableColumns();
+//        BlockInputStreamPtr in = store->read(*db_context,
+//                                             db_context->getSettingsRef(),
+//                                             columns,
+//                                             {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+//                                             /* num_streams= */ 1,
+//                                             /* max_version= */ std::numeric_limits<UInt64>::max(),
+//                                             EMPTY_FILTER,
+//                                             TRACING_NAME,
+//                                             /* keep_order= */ false,
+//                                             /* is_fast_scan= */ false,
+//                                             /* expected_block_size= */ 1024)[0];
+//        ASSERT_INPUTSTREAM_NROWS(in, num_rows_write);
+//    }
+//
+//    {
+//        // clear data
+//        store->clearData();
+//        auto table_column_defines = DMTestEnv::getDefaultColumns();
+//        store = reload(table_column_defines);
+//        store->deleteRange(*db_context, db_context->getSettingsRef(), RowKeyRange::newAll(false, 1));
+//        store->flushCache(*db_context, RowKeyRange::newAll(false, 1), true);
+//    }
+//
+//    {
+//        const auto & columns = store->getTableColumns();
+//        BlockInputStreamPtr in = store->read(*db_context,
+//                                             db_context->getSettingsRef(),
+//                                             columns,
+//                                             {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+//                                             /* num_streams= */ 1,
+//                                             /* max_version= */ std::numeric_limits<UInt64>::max(),
+//                                             EMPTY_FILTER,
+//                                             TRACING_NAME,
+//                                             /* keep_order= */ false,
+//                                             /* is_fast_scan= */ false,
+//                                             /* expected_block_size= */ 1024)[0];
+//        ASSERT_INPUTSTREAM_NROWS(in, 0);
+//    }
+//
+//    auto kvstore = db_context->getTMTContext().getKVStore();
+//    auto remote_store_id = kvstore->getStoreMeta().id();
+//    PS::V3::CheckpointInfo info{
+//        .checkpoint_manifest_path = checkpoint_path,
+//        .checkpoint_data_dir = Poco::Path(checkpoint_path).parent().toString(),
+//        .checkpoint_store_id = remote_store_id,
+//    };
+//
+//    {
+//        // change current store id before restore
+//        auto store = metapb::Store{};
+//        store.set_id(2);
+//        kvstore->setStore(store);
+//    }
+//
+//    auto local_ps = PS::V3::CheckpointPageManager::createTempPageStorage(*db_context, info.checkpoint_manifest_path, info.checkpoint_data_dir);
+//    store->ingestSegmentFromCheckpointPath(*db_context, db_context->getSettingsRef(), RowKeyRange::fromHandleRange(HandleRange(0, num_rows_write / 2)), local_ps, info);
+//    {
+//        const auto & columns = store->getTableColumns();
+//        BlockInputStreamPtr in = store->read(*db_context,
+//                                             db_context->getSettingsRef(),
+//                                             columns,
+//                                             {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+//                                             /* num_streams= */ 1,
+//                                             /* max_version= */ std::numeric_limits<UInt64>::max(),
+//                                             EMPTY_FILTER,
+//                                             TRACING_NAME,
+//                                             /* keep_order= */ false,
+//                                             /* is_fast_scan= */ false,
+//                                             /* expected_block_size= */ 1024)[0];
+//        ASSERT_INPUTSTREAM_NROWS(in, num_rows_write / 2);
+//    }
+//
+//    store->ingestSegmentFromCheckpointPath(*db_context, db_context->getSettingsRef(), RowKeyRange::fromHandleRange(HandleRange(num_rows_write / 2, num_rows_write)), local_ps, info);
+//    {
+//        const auto & columns = store->getTableColumns();
+//        BlockInputStreamPtr in = store->read(*db_context,
+//                                             db_context->getSettingsRef(),
+//                                             columns,
+//                                             {RowKeyRange::newAll(store->isCommonHandle(), store->getRowKeyColumnSize())},
+//                                             /* num_streams= */ 1,
+//                                             /* max_version= */ std::numeric_limits<UInt64>::max(),
+//                                             EMPTY_FILTER,
+//                                             TRACING_NAME,
+//                                             /* keep_order= */ false,
+//                                             /* is_fast_scan= */ false,
+//                                             /* expected_block_size= */ 1024)[0];
+//        ASSERT_INPUTSTREAM_NROWS(in, num_rows_write);
+//    }
+//}
+//CATCH
 
 TEST_P(DeltaMergeStoreRWTest, DisableSmallColumnCache)
 try

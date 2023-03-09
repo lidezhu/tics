@@ -23,6 +23,7 @@
 #include <Server/RaftConfigParser.h>
 #include <Storages/DeltaMerge/ColumnFile/ColumnFileSchema.h>
 #include <Storages/DeltaMerge/StoragePool.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
 #include <Storages/Transaction/TMTContext.h>
 #include <TestUtils/TiFlashTestEnv.h>
 #include <aws/s3/S3Client.h>
@@ -30,6 +31,9 @@
 #include <aws/s3/model/DeleteBucketRequest.h>
 
 #include <memory>
+
+
+#include "Flash/Disaggregated/MockS3LockClient.h"
 
 namespace DB::tests
 {
@@ -142,7 +146,9 @@ void TiFlashTestEnv::addGlobalContext(const DB::Settings & settings_, Strings te
 
     global_context->setPageStorageRunMode(ps_run_mode);
     global_context->initializeGlobalStoragePoolIfNeed(global_context->getPathPool());
-    global_context->initializeWriteNodePageStorageIfNeed(global_context->getPathPool());
+    global_context->initializeWriteNodePageStorageIfNeed(global_context->getPathPool(), /*s3_enabled*/ true);
+
+    global_context->initializeRemoteDataStore(global_context->getFileProvider(), true);
     LOG_INFO(Logger::get(), "Storage mode : {}", static_cast<UInt8>(global_context->getPageStorageRunMode()));
 
     TiFlashRaftConfig raft_config;
@@ -177,7 +183,12 @@ Context TiFlashTestEnv::getContext(const DB::Settings & settings, Strings testda
     auto paths = getPathPool(testdata_path);
     context.setPathPool(paths.first, paths.second, Strings{}, context.getPathCapacity(), context.getFileProvider());
     global_contexts[0]->initializeGlobalStoragePoolIfNeed(context.getPathPool());
-    global_contexts[0]->initializeWriteNodePageStorageIfNeed(context.getPathPool());
+    global_contexts[0]->initializeWriteNodePageStorageIfNeed(context.getPathPool(), true);
+    if (auto ps = global_contexts[0]->getWriteNodePageStorage(); ps)
+    {
+        auto mock_s3lock_client = std::make_shared<S3::MockS3LockClient>(S3::ClientFactory::instance().sharedTiFlashClient());
+        ps->initLocksLocalManager(TiFlashTestEnv::getStoreId(), mock_s3lock_client);
+    }
     context.getSettingsRef() = settings;
     return context;
 }
@@ -253,6 +264,11 @@ void TiFlashTestEnv::deleteBucket(Aws::S3::S3Client & s3_client, const String & 
     Aws::S3::Model::DeleteBucketRequest request;
     request.SetBucket(bucket);
     s3_client.DeleteBucket(request);
+}
+
+UInt64 TiFlashTestEnv::getStoreId()
+{
+    return 100;
 }
 
 } // namespace DB::tests

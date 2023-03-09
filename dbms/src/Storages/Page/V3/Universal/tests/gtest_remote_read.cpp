@@ -34,6 +34,7 @@
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
+#include <Flash/Disaggregated/MockS3LockClient.h>
 
 #include <memory>
 
@@ -61,7 +62,7 @@ public:
 
         ASSERT_TRUE(::DB::tests::TiFlashTestEnv::createBucketIfNotExist(*s3_client, bucket));
 
-        page_storage = UniversalPageStorage::create("write", delegator, config, file_provider, s3_client, bucket);
+        page_storage = UniversalPageStorage::create("write", delegator, config, file_provider, true);
         page_storage->restore();
     }
 
@@ -74,8 +75,10 @@ public:
     {
         auto path = getTemporaryPath();
         delegator = std::make_shared<DB::tests::MockDiskDelegatorSingle>(path);
-        auto storage = UniversalPageStorage::create("test.t", delegator, config_, file_provider, s3_client, bucket);
+        auto storage = UniversalPageStorage::create("test.t", delegator, config_, file_provider, true);
         storage->restore();
+        auto mock_s3lock_client = std::make_shared<S3::MockS3LockClient>(S3::ClientFactory::instance().sharedTiFlashClient());
+        storage->initLocksLocalManager(100, mock_s3lock_client);
         return storage;
     }
 

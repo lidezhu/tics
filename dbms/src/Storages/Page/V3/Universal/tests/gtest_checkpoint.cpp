@@ -752,15 +752,12 @@ public:
         auto path = getTemporaryPath();
         auto delegator = std::make_shared<DB::tests::MockDiskDelegatorSingle>(path);
         auto & global_context = DB::tests::TiFlashTestEnv::getGlobalContext();
-        s3_client = S3::ClientFactory::instance().sharedClient();
-        bucket = S3::ClientFactory::instance().bucket();
         uni_ps_service = UniversalPageStorageService::createForTest(
             global_context,
             "test.t",
             delegator,
             PageStorageConfig{.blob_heavy_gc_valid_rate = 1.0},
-            s3_client,
-            bucket);
+            true);
         log = Logger::get("UniversalPageStorageServiceCheckpointTest");
         ASSERT_TRUE(::DB::tests::TiFlashTestEnv::createBucketIfNotExist(*s3_client, bucket));
     }

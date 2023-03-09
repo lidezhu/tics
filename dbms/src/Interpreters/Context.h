@@ -103,6 +103,8 @@ using MockMPPServerInfo = DB::tests::MockMPPServerInfo;
 class TiFlashSecurityConfig;
 using TiFlashSecurityConfigPtr = std::shared_ptr<TiFlashSecurityConfig>;
 class MockStorage;
+struct FastAddPeerContext;
+using FastAddPeerContextPtr = std::shared_ptr<FastAddPeerContext>;
 
 enum class PageStorageRunMode : UInt8;
 namespace DM
@@ -432,10 +434,16 @@ public:
     bool initializeGlobalStoragePoolIfNeed(const PathPool & path_pool);
     DM::GlobalStoragePoolPtr getGlobalStoragePool() const;
 
-    void initializeWriteNodePageStorageIfNeed(const PathPool & path_pool);
+    void initializeRemoteDataStore(const FileProviderPtr & file_provider, bool s3_enabled);
+    DM::Remote::IDataStorePtr getRemoteDataStore() const;
+
+    void initializeWriteNodePageStorageIfNeed(const PathPool & path_pool, bool s3_enabled);
     UniversalPageStoragePtr getWriteNodePageStorage() const;
 
     SharedContextDisaggPtr getSharedContextDisagg() const;
+
+    void initializeFastAddPeerContext();
+    FastAddPeerContextPtr getFastAddPeerContext() const;
 
     /// Call after initialization before using system logs. Call for global context.
     void initializeSystemLogs();

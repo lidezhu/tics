@@ -19,6 +19,8 @@
 #include <Storages/DeltaMerge/WriteBatchesImpl.h>
 #include <Storages/DeltaMerge/convertColumnTypeHelpers.h>
 #include <Storages/PathPool.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
+#include <Storages/DeltaMerge/Remote/DataStore/DataStore.h>
 
 namespace DB
 {
@@ -90,6 +92,67 @@ ColumnFilePersistedPtr ColumnFileBig::deserializeMetadata(const DMContext & cont
     auto dmfile = DMFile::restore(context.db_context.getFileProvider(), file_id, file_page_id, file_parent_path, DMFile::ReadMetaMode::all());
 
     auto * dp_file = new ColumnFileBig(dmfile, valid_rows, valid_bytes, segment_range);
+    return std::shared_ptr<ColumnFileBig>(dp_file);
+}
+
+ColumnFilePersistedPtr ColumnFileBig::createFromCheckpoint(DMContext & context, //
+                                                                    const RowKeyRange & target_range,
+                                                                    ReadBuffer & buf,
+                                                                    UniversalPageStoragePtr temp_ps,
+                                                                    UInt64 remote_store_id,
+                                                                    TableID ns_id,
+                                                                    WriteBatches & wbs)
+{
+    UInt64 file_page_id;
+    size_t valid_rows, valid_bytes;
+
+    readIntBinary(file_page_id, buf);
+    readIntBinary(valid_rows, buf);
+    readIntBinary(valid_bytes, buf);
+
+    // get target dtfile s3 key
+    auto remote_page_id = UniversalPageIdFormat::toFullPageId(UniversalPageIdFormat::toFullPrefix(StorageType::Data, ns_id), file_page_id);
+    auto remote_file_id = temp_ps->getNormalPageId(remote_page_id);
+    auto file_id = UniversalPageIdFormat::getU64ID(remote_file_id);
+    auto remote_data_location = temp_ps->getCheckpointLocation(remote_page_id);
+
+    S3::DMFileOID file_oid;
+    if (remote_data_location.has_value())
+    {
+        const auto & lock_key = *(remote_data_location->data_file_id);
+        const auto & lock_key_view = S3::S3FilenameView::fromKey(lock_key);
+        file_oid.store_id = lock_key_view.store_id;
+        file_oid.table_id = ns_id;
+        file_oid.file_id = file_id;
+        RUNTIME_CHECK(lock_key_view.asDataFile().toFullKey() == S3::S3Filename::fromDMFileOID(file_oid).toFullKey());
+    }
+    else
+    {
+        file_oid.store_id = remote_store_id;
+        file_oid.table_id = ns_id;
+        file_oid.file_id = file_id;
+    }
+    auto data_key = S3::S3Filename::fromDMFileOID(file_oid).toFullKey();
+    auto delegator = context.path_pool->getStableDiskDelegator();
+    auto & storage_pool = context.storage_pool;
+    auto new_local_file_id = storage_pool->newDataPageIdForDTFile(delegator, __PRETTY_FUNCTION__);
+    PS::V3::CheckpointLocation loc{
+        .data_file_id = std::make_shared<String>(data_key),
+        .offset_in_file = 0,
+        .size_in_file = 0,
+    };
+    wbs.data.putRemoteExternal(new_local_file_id, loc);
+
+    // create a local file with only needed metadata
+    auto parent_path = delegator.choosePath();
+    auto new_dmfile = DMFile::create(new_local_file_id, parent_path);
+    auto remote_data_store = context.db_context.getRemoteDataStore();
+    remote_data_store->copyDMFileMetaToLocalPath(file_oid, new_dmfile->path());
+    // TODO: bytes on disk is not correct
+    delegator.addDTFile(new_local_file_id, new_dmfile->getBytesOnDisk(), parent_path);
+    wbs.writeLogAndData();
+    new_dmfile->enableGC();
+    auto * dp_file = new ColumnFileBig(new_dmfile, valid_rows, valid_bytes, target_range);
     return std::shared_ptr<ColumnFileBig>(dp_file);
 }
 

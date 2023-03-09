@@ -100,7 +100,7 @@ protected:
     {
         kvstore.reset();
         auto & global_ctx = TiFlashTestEnv::getGlobalContext();
-        global_ctx.initializeWriteNodePageStorageIfNeed(*path_pool);
+        global_ctx.initializeWriteNodePageStorageIfNeed(*path_pool, true);
         kvstore = std::make_unique<KVStore>(global_ctx);
         // only recreate kvstore and restore data from disk, don't recreate proxy instance
         kvstore->restore(*path_pool, proxy_helper.get());

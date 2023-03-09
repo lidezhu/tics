@@ -17,12 +17,17 @@
 #include <Storages/DeltaMerge/File/DMFile.h>
 #include <Storages/DeltaMerge/File/DMFileBlockInputStream.h>
 #include <Storages/DeltaMerge/Filter/FilterHelper.h>
+#include <Storages/DeltaMerge/Remote/DataStore/DataStore.h>
 #include <Storages/DeltaMerge/RowKeyFilter.h>
 #include <Storages/DeltaMerge/RowKeyRange.h>
 #include <Storages/DeltaMerge/StableValueSpace.h>
 #include <Storages/DeltaMerge/StoragePool.h>
 #include <Storages/DeltaMerge/WriteBatchesImpl.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
 #include <Storages/PathPool.h>
+
+#include "Storages/DeltaMerge/File/DMFileBlockOutputStream.h"
+
 
 namespace DB
 {
@@ -119,6 +124,87 @@ StableValueSpacePtr StableValueSpace::restore(DMContext & context, PageIdU64 id)
 
     stable->valid_rows = valid_rows;
     stable->valid_bytes = valid_bytes;
+
+    return stable;
+}
+
+StableValueSpacePtr StableValueSpace::createFromCheckpoint( //
+    DMContext & context,
+    UniversalPageStoragePtr temp_ps,
+    UInt64 remote_store_id,
+    TableID ns_id,
+    PageIdU64 src_stable_id,
+    WriteBatches & wbs)
+{
+    auto & storage_pool = context.storage_pool;
+    auto new_stable_id = storage_pool->newMetaPageId();
+    auto stable = std::make_shared<StableValueSpace>(new_stable_id);
+
+    auto full_src_stable_id = UniversalPageIdFormat::toFullPageId(UniversalPageIdFormat::toFullPrefix(StorageType::Meta, ns_id), src_stable_id);
+    auto page = temp_ps->read(full_src_stable_id);
+    ReadBufferFromMemory buf(page.data.begin(), page.data.size());
+
+    UInt64 version, valid_rows, valid_bytes, size;
+    readIntBinary(version, buf);
+    if (version != StableFormat::V1)
+        throw Exception("Unexpected version: " + DB::toString(version));
+
+    readIntBinary(valid_rows, buf);
+    readIntBinary(valid_bytes, buf);
+    readIntBinary(size, buf);
+    for (size_t i = 0; i < size; ++i)
+    {
+        // get target dtfile s3 key
+        UInt64 page_id;
+        readIntBinary(page_id, buf);
+        auto remote_page_id = UniversalPageIdFormat::toFullPageId(UniversalPageIdFormat::toFullPrefix(StorageType::Data, ns_id), page_id);
+        auto remote_file_id = temp_ps->getNormalPageId(remote_page_id);
+        auto file_id = UniversalPageIdFormat::getU64ID(remote_file_id);
+        auto remote_data_location = temp_ps->getCheckpointLocation(remote_page_id);
+        S3::DMFileOID file_oid;
+        if (remote_data_location.has_value())
+        {
+            const auto & lock_key = *(remote_data_location->data_file_id);
+            const auto & lock_key_view = S3::S3FilenameView::fromKey(lock_key);
+            file_oid.store_id = lock_key_view.store_id;
+            file_oid.table_id = ns_id;
+            file_oid.file_id = file_id;
+            RUNTIME_CHECK(lock_key_view.asDataFile().toFullKey() == S3::S3Filename::fromDMFileOID(file_oid).toFullKey());
+        }
+        else
+        {
+            file_oid.store_id = remote_store_id;
+            file_oid.table_id = ns_id;
+            file_oid.file_id = file_id;
+        }
+        auto data_key = S3::S3Filename::fromDMFileOID(file_oid).toFullKey();
+        auto delegator = context.path_pool->getStableDiskDelegator();
+        auto new_local_file_id = storage_pool->newDataPageIdForDTFile(delegator, __PRETTY_FUNCTION__);
+        PS::V3::CheckpointLocation loc{
+            .data_file_id = std::make_shared<String>(data_key),
+            .offset_in_file = 0,
+            .size_in_file = 0,
+        };
+        wbs.data.putRemoteExternal(new_local_file_id, loc);
+
+        // create a local file with only needed metadata
+        auto parent_path = delegator.choosePath();
+        auto new_dmfile = DMFile::create(new_local_file_id, parent_path);
+        auto remote_data_store = context.db_context.getRemoteDataStore();
+        auto output_stream = std::make_shared<DM::DMFileBlockOutputStream>(context.db_context, new_dmfile, {});
+        output_stream->writePrefix();
+        remote_data_store->copyDMFileMetaToLocalPath(file_oid, new_dmfile->path());
+        output_stream->writeSuffix();
+        // TODO: bytes on disk is not correct
+        delegator.addDTFile(new_local_file_id, new_dmfile->getBytesOnDisk(), parent_path);
+        wbs.writeLogAndData();
+        new_dmfile->enableGC();
+        stable->files.push_back(new_dmfile);
+    }
+
+    stable->valid_rows = valid_rows;
+    stable->valid_bytes = valid_bytes;
+    stable->saveMeta(wbs.meta);
 
     return stable;
 }

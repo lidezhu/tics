@@ -44,33 +44,26 @@ UniversalPageStorageServicePtr UniversalPageStorageService::create(
     Context & context,
     const String & name,
     PSDiskDelegatorPtr delegator,
-    const PageStorageConfig & config)
+    const PageStorageConfig & config,
+    bool s3_enabled)
 {
     auto service = UniversalPageStorageServicePtr(new UniversalPageStorageService(context));
-    auto & s3factory = S3::ClientFactory::instance();
-    std::shared_ptr<Aws::S3::S3Client> s3_client;
-    String bucket;
-    if (s3factory.isEnabled())
-    {
-        s3_client = s3factory.sharedClient();
-        bucket = s3factory.bucket();
-    }
-    service->uni_page_storage = UniversalPageStorage::create(name, delegator, config, context.getFileProvider(), s3_client, bucket);
+    service->uni_page_storage = UniversalPageStorage::create(name, delegator, config, context.getFileProvider(), s3_enabled);
     service->uni_page_storage->restore();
 
-    if (s3factory.isEnabled())
-    {
-        // TODO: make this interval reloadable
-        auto interval_s = context.getSettingsRef().remote_checkpoint_interval_seconds;
-        // Only upload checkpoint when S3 is enabled
-        service->checkpoint_pool = std::make_unique<BackgroundProcessingPool>(1, "ps-checkpoint");
-        service->remote_checkpoint_handle = service->checkpoint_pool->addTask(
-            [service] {
-                return service->uploadCheckpoint();
-            },
-            /*multi*/ false,
-            /*interval_ms*/ interval_s * 1000);
-    }
+//    if (s3_enabled)
+//    {
+//        // TODO: make this interval reloadable
+//        auto interval_s = context.getSettingsRef().remote_checkpoint_interval_seconds;
+//        // Only upload checkpoint when S3 is enabled
+//        service->checkpoint_pool = std::make_unique<BackgroundProcessingPool>(1, "ps-checkpoint");
+//        service->remote_checkpoint_handle = service->checkpoint_pool->addTask(
+//            [service] {
+//                return service->uploadCheckpoint();
+//            },
+//            /*multi*/ false,
+//            /*interval_ms*/ interval_s * 1000);
+//    }
 
     auto & bkg_pool = context.getBackgroundPool();
     service->gc_handle = bkg_pool.addTask(
@@ -88,28 +81,20 @@ UniversalPageStorageService::createForTest(
     const String & name,
     PSDiskDelegatorPtr delegator,
     const PageStorageConfig & config,
-    std::shared_ptr<Aws::S3::S3Client> s3_client,
-    String bucket)
+    bool enable_s3)
 {
     auto service = UniversalPageStorageServicePtr(new UniversalPageStorageService(context));
-    service->uni_page_storage = UniversalPageStorage::create(name, delegator, config, context.getFileProvider(), s3_client, bucket);
+    service->uni_page_storage = UniversalPageStorage::create(name, delegator, config, context.getFileProvider(), enable_s3);
     service->uni_page_storage->restore();
     // not register background task under test
     return service;
 }
 
-struct CheckpointUploadFunctor
+bool CheckpointUploadFunctor::operator()(const PS::V3::LocalCheckpointFiles & checkpoint) const
 {
-    const StoreID store_id;
-    const UInt64 sequence;
-    const DM::Remote::IDataStorePtr remote_store;
-
-    bool operator()(const PS::V3::LocalCheckpointFiles & checkpoint) const
-    {
-        // Persist checkpoint to remote_source
-        return remote_store->putCheckpointFiles(checkpoint, store_id, sequence);
-    }
-};
+    // Persist checkpoint to remote_source
+    return remote_store->putCheckpointFiles(checkpoint, store_id, sequence);
+}
 
 bool UniversalPageStorageService::uploadCheckpoint()
 {

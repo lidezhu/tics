@@ -24,6 +24,8 @@
 #include <TestUtils/TiFlashTestBasic.h>
 #include <gtest/gtest.h>
 #include <signal.h>
+#include <Storages/Page/V3/Universal/UniversalPageStorage.h>
+#include "Flash/Disaggregated/MockS3LockClient.h"
 
 
 namespace DB::FailPoints
@@ -65,7 +67,7 @@ int main(int argc, char ** argv)
     install_fault_signal_handlers({SIGSEGV, SIGILL, SIGFPE, SIGABRT, SIGTERM});
 
     DB::tests::TiFlashTestEnv::setupLogger();
-    auto run_mode = DB::PageStorageRunMode::ONLY_V3;
+    auto run_mode = DB::PageStorageRunMode::UNI_PS;
     DB::tests::TiFlashTestEnv::initializeGlobalContext(/*testdata_path*/ {}, run_mode);
 
     DB::ServerInfo server_info;
@@ -91,6 +93,7 @@ int main(int argc, char ** argv)
     };
     Poco::Environment::set("AWS_EC2_METADATA_DISABLED", "true"); // disable to speedup testing
     DB::S3::ClientFactory::instance().init(s3config, mock_s3 == "true");
+
 
 #ifdef FIU_ENABLE
     fiu_init(0); // init failpoint

@@ -131,5 +131,31 @@ ColumnFilePersisteds deserializeSavedColumnFiles(const DMContext & context, cons
     }
     return column_files;
 }
+
+ColumnFilePersisteds createColumnFilesFromCheckpoint( //
+    DMContext & context,
+    const RowKeyRange & segment_range,
+    ReadBuffer & buf,
+    UniversalPageStoragePtr temp_ps,
+    UInt64 remote_store_id,
+    TableID ns_id,
+    WriteBatches & wbs)
+{
+    // Check binary version
+    DeltaFormat::Version version;
+    readIntBinary(version, buf);
+
+    ColumnFilePersisteds column_files;
+    switch (version)
+    {
+    case DeltaFormat::V3:
+        column_files = createColumnFilesInV3FormatFromCheckpoint(context, segment_range, buf, temp_ps, remote_store_id, ns_id, wbs);
+        break;
+    default:
+        throw Exception("Unexpected delta value version: " + DB::toString(version) + ", latest version: " + DB::toString(DeltaFormat::V3),
+                        ErrorCodes::LOGICAL_ERROR);
+    }
+    return column_files;
+}
 } // namespace DM
 } // namespace DB

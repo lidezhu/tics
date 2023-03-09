@@ -1167,6 +1167,8 @@ int Server::main(const std::vector<std::string> & /*args*/)
             storage_config.remote_cache_config.getPageCacheDir(),
             storage_config.remote_cache_config.getPageCapacity());
 
+    global_context->initializeFastAddPeerContext();
+
     /// Initialize RateLimiter.
     global_context->initializeRateLimiter(config(), bg_pool, blockable_bg_pool);
 

@@ -65,6 +65,7 @@
 #include <Storages/PathCapacityMetrics.h>
 #include <Storages/PathPool.h>
 #include <Storages/Transaction/BackgroundService.h>
+#include <Storages/Transaction/FastAddPeerContext.h>
 #include <Storages/Transaction/TMTContext.h>
 #include <TableFunctions/TableFunctionFactory.h>
 #include <TiDB/Schema/SchemaSyncService.h>
@@ -172,6 +173,8 @@ struct ContextShared
 
     /// Everything related with Disaggregation.
     SharedContextDisaggPtr ctx_disagg;
+
+    FastAddPeerContextPtr fap_context;
 
     TiFlashSecurityConfigPtr security_config;
 
@@ -1704,7 +1707,7 @@ DM::GlobalStoragePoolPtr Context::getGlobalStoragePool() const
  * 1. Not in disaggregated mode.
  * 2. In disaggregated write mode.
  */
-void Context::initializeWriteNodePageStorageIfNeed(const PathPool & path_pool)
+void Context::initializeWriteNodePageStorageIfNeed(const PathPool & path_pool, bool s3_enabled)
 {
     auto lock = getLock();
     if (shared->storage_run_mode == PageStorageRunMode::UNI_PS)
@@ -1722,7 +1725,8 @@ void Context::initializeWriteNodePageStorageIfNeed(const PathPool & path_pool)
                 *this,
                 "write",
                 path_pool.getPSDiskDelegatorGlobalMulti(PathPool::write_uni_path_prefix),
-                config);
+                config,
+                s3_enabled);
             LOG_INFO(shared->log, "initialized GlobalUniversalPageStorage(WriteNode)");
         }
         catch (...)
@@ -1756,6 +1760,18 @@ SharedContextDisaggPtr Context::getSharedContextDisagg() const
     auto lock = getLock();
     RUNTIME_CHECK(shared->ctx_disagg != nullptr);
     return shared->ctx_disagg;
+}
+
+void Context::initializeFastAddPeerContext()
+{
+    auto lock = getLock();
+    shared->fap_context = std::make_shared<FastAddPeerContext>();
+}
+
+FastAddPeerContextPtr Context::getFastAddPeerContext() const
+{
+    auto lock = getLock();
+    return shared->fap_context;
 }
 
 UInt16 Context::getTCPPort() const
