@@ -57,6 +57,7 @@ void RaftDataReader::traverseRemoteRaftLogForRegion(UInt64 region_id, const std:
     const auto page_ids = uni_ps.page_directory->getAllPageIdsInRange(start, end, snapshot);
     for (const auto & page_id : page_ids)
     {
+        RUNTIME_CHECK(page_id.size() == 20, page_id.size());
         auto maybe_location = uni_ps.getCheckpointLocation(page_id, snapshot);
         RUNTIME_CHECK(maybe_location.has_value());
         acceptor(page_id, *maybe_location);

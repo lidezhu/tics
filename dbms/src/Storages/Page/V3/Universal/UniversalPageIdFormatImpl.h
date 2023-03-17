@@ -36,7 +36,7 @@ namespace DB
 //  And because some key will be migrated from kv engine to raft engine,
 //  kv engine and raft engine may write and delete the same key.
 //  So to distinguish data written by kv engine and raft engine,
-//  we prepend an `0x01` to the key written by raft engine, andprepend an `0x02` to the key written by kv engine.
+//  we prepend an `0x01` to the key written by raft engine, and prepend an `0x02` to the key written by kv engine.
 //  For example, suppose a key in tikv to be {0x01, 0x02, 0x03}.
 //  If it is written by raft engine, then actual key uni ps see will be {0x01, 0x01, 0x02, 0x03}.
 //  But if it is written by kv engine, the actual key uni ps see will be {0x02, 0x01, 0x02, 0x03}.
