@@ -368,6 +368,7 @@ Segment::SegmentMetaInfos Segment::readAllSegmentsMetaInfoInRange( //
         {
             end_key_and_segment_ids.emplace_back(segment_info.range.getEnd().toRowKeyValue(), segment_info.segment_id);
         }
+        LOG_DEBUG(Logger::get(), "Read segment {} meta info done", current_segment_id);
         current_segment_id = segment_info.next_segment_id;
         if (!(segment_info.range.shrink(target_range).none()))
         {
