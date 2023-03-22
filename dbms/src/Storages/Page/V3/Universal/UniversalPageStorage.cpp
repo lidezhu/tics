@@ -409,6 +409,7 @@ bool UniversalPageStorage::canSkipCheckpoint() const
 {
     std::scoped_lock lock(checkpoint_mu);
     auto snap = page_directory->createSnapshot(/*tracing_id*/ "canSkipCheckpoint");
+    LOG_DEBUG(log, "Current snapshot sequence {}, last_checkpoint_sequence {}", snap->sequence, last_checkpoint_sequence);
     return snap->sequence == last_checkpoint_sequence;
 }
 

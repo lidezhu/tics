@@ -1480,6 +1480,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         ++max_sequence;
         r.version = PageVersion(max_sequence, 0);
     }
+    LOG_DEBUG(log, "Write with sequence {}", max_sequence);
 
     wal->apply(Trait::Serializer::serializeTo(edit), write_limiter);
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wal).Observe(watch.elapsedSeconds());
