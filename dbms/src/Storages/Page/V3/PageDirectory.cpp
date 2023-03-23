@@ -1488,6 +1488,8 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
 
     writers.push_back(&w);
     w.cv.wait(apply_lock, [&] { return w.done || &w == writers.front(); });
+    if (w.done)
+        return {};
 
     auto * last_writer = buildWriteGroup(apply_lock);
     apply_lock.unlock();
