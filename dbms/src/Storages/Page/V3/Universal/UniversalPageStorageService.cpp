@@ -72,12 +72,13 @@ UniversalPageStorageServicePtr UniversalPageStorageService::create(
     }
 
     auto & bkg_pool = context.getBackgroundPool();
+    auto gc_interval = context.getSettingsRef().dt_page_gc_interval_seconds;
     service->gc_handle = bkg_pool.addTask(
         [service] {
             return service->gc();
         },
         false,
-        /*interval_ms*/ 60 * 1000);
+        /*interval_ms*/ gc_interval * 1000);
     return service;
 }
 
