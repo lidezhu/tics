@@ -1589,7 +1589,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     }
     if (!writers.empty())
     {
-        writers.front().cv.notify_one();
+        writers.front()->cv.notify_one();
     }
     return applied_data_files;
 }
