@@ -471,11 +471,14 @@ PS::V3::CPDataWriteStats UniversalPageStorage::dumpIncrementalCheckpoint(const U
     {
         file_ids_to_compact = options.compact_getter();
     }
+    LOG_DEBUG(log, "Before write edits");
     // get the remote file ids that need to be compacted
     auto write_stats = writer->writeEditsAndApplyCheckpointInfo(edit_from_mem, file_ids_to_compact);
+    LOG_DEBUG(log, "Before write suffix");
     writer->writeSuffix();
     writer.reset();
 
+    LOG_DEBUG(log, "Before upload checkpoint data");
     // Persist the checkpoint to remote store.
     // If not persisted or exception throw, then we can not apply the checkpoint
     // info to directory. Neither update `last_checkpoint_sequence`.

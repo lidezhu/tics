@@ -110,16 +110,19 @@ CPDataWriteStats CPFilesWriter::writeEditsAndApplyCheckpointInfo(
             is_rewrite = true;
             rewrite_stats.try_emplace(file_id, 0).first->second += rec_edit.entry.size;
         }
+        LOG_DEBUG(log, "begin read page id: {} entry: {}", rec_edit.page_id, rec_edit.entry);
 
         // 2. For entry edits without the checkpoint info, write them to the data file,
         // and assign a new checkpoint info.
         auto page = data_source->read({rec_edit.page_id, rec_edit.entry});
         RUNTIME_CHECK_MSG(page.isValid(), "failed to read page, record={}", rec_edit);
+        LOG_DEBUG(log, "after read page id: {} entry: {}", rec_edit.page_id, rec_edit.entry);
         auto data_location = data_writer->write(
             rec_edit.page_id,
             rec_edit.version,
             page.data.begin(),
             page.data.size());
+        LOG_DEBUG(log, "after write page id: {} entry: {}", rec_edit.page_id, rec_edit.entry);
         RUNTIME_CHECK(page.data.size() == rec_edit.entry.size, page.data.size(), rec_edit.entry.size);
         bool is_local_data_reclaimed = rec_edit.entry.checkpoint_info.has_value() && rec_edit.entry.checkpoint_info.is_local_data_reclaimed;
         rec_edit.entry.checkpoint_info = OptionalCheckpointInfo{

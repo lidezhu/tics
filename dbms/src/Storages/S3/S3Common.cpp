@@ -513,7 +513,8 @@ void rewriteObjectWithTagging(const TiFlashS3Client & client, const String & key
     client.setBucketAndKeyWithRoot(req, key);
     req.WithCopySource(copy_source) //
         .WithTagging(tagging)
-        .WithTaggingDirective(Aws::S3::Model::TaggingDirective::REPLACE);
+        .WithTaggingDirective(Aws::S3::Model::TaggingDirective::REPLACE)
+        .WithMetadataDirective(Aws::S3::Model::MetadataDirective::REPLACE);
     ProfileEvents::increment(ProfileEvents::S3CopyObject);
     auto outcome = client.CopyObject(req);
     if (!outcome.IsSuccess())
