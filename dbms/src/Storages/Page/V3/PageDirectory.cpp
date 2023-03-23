@@ -1453,7 +1453,7 @@ void PageDirectory<Trait>::applyRefEditRecord(
 }
 
 template <typename Trait>
-PageDirectory<Trait>::Writer * PageDirectory<Trait>::buildWriteGroup(std::unique_lock<std::mutex> & /*lock*/)
+typename PageDirectory<Trait>::Writer * PageDirectory<Trait>::buildWriteGroup(std::unique_lock<std::mutex> & /*lock*/)
 {
     RUNTIME_CHECK(!writers.empty());
     auto * first = writers.front();
