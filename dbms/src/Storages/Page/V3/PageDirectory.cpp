@@ -1458,7 +1458,9 @@ typename PageDirectory<Trait>::Writer * PageDirectory<Trait>::buildWriteGroup(st
     RUNTIME_CHECK(!writers.empty());
     auto * first = writers.front();
     auto * last_writer = first;
-    for (auto iter = writers.begin(); iter != writers.end(); iter++)
+    auto iter = writers.begin();
+    iter++;
+    for (; iter != writers.end(); iter++)
     {
         auto * w = *iter;
         first->edit->merge(std::move(*(w->edit)));
