@@ -41,7 +41,7 @@ SRCPATH=$(
   pwd -P
 )
 NPROC=${NPROC:-$(nproc || grep -c ^processor /proc/cpuinfo)}
-ENABLE_THINLTO=${ENABLE_THINLTO:-ON}
+ENABLE_THINLTO=${ENABLE_THINLTO:-OFF}
 ENABLE_PCH=${ENABLE_PCH:-ON}
 
 INSTALL_DIR="${SRCPATH}/release-centos7-llvm/tiflash"
@@ -56,7 +56,8 @@ else
   ENABLE_FAILPOINTS="ON"
   JEMALLOC_NARENAS="40"
 fi
-rm -rf ${BUILD_DIR} && mkdir -p ${BUILD_DIR} && cd ${BUILD_DIR}
+#rm -rf ${BUILD_DIR} && 
+mkdir -p ${BUILD_DIR} && cd ${BUILD_DIR}
 
 cmake -S "${SRCPATH}" \
   ${DEFINE_CMAKE_PREFIX_PATH} \
