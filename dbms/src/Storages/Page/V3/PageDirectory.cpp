@@ -1490,6 +1490,8 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
 
     writers.push_back(&w);
     w.cv.wait(apply_lock, [&] { return w.done || &w == writers.front(); });
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wait_in_group).Observe(watch.elapsedSeconds());
+    watch.restart();
     if (w.done)
         return {};
 
