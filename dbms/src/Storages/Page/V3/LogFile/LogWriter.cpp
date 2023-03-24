@@ -84,7 +84,7 @@ void LogWriter::flush(const WriteLimiterPtr & write_limiter, bool background)
                         /*background=*/background,
                         /*truncate_if_failed=*/false,
                         /*enable_failpoint=*/false);
-    log_file->fsync();
+//    log_file->fsync();
     written_bytes += write_buffer.offset();
 
     // reset the write_buffer

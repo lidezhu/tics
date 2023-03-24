@@ -96,7 +96,7 @@ void BlobFile::write(char * buffer, size_t offset, size_t size, const WriteLimit
 #else
     PageUtil::writeFile(wrfile, offset, buffer, size, write_limiter, background, /*truncate_if_failed=*/false, /*enable_failpoint=*/false);
 #endif
-    PageUtil::syncFile(wrfile);
+//    PageUtil::syncFile(wrfile);
 
     UInt64 expand_size = 0;
     {
