@@ -186,7 +186,7 @@ void DatabaseTiFlash::loadTables(Context & context, ThreadPool * thread_pool, bo
         auto begin = table_files.begin() + i * bunch_size;
         auto end = (i + 1 == num_bunches) ? table_files.end() : (table_files.begin() + (i + 1) * bunch_size);
 
-        auto task = std::make_shared<std::packaged_task<void()>>([&task_function, begin, end] {
+        auto task = std::make_shared<std::packaged_task<void()>>([task_function, begin, end] {
             task_function(begin, end);
         });
         tasks.push_back(task);
@@ -207,6 +207,7 @@ void DatabaseTiFlash::loadTables(Context & context, ThreadPool * thread_pool, bo
             f.get();
         }
     }
+    LOG_DEBUG(log, "Loaded {} tables", tables_processed.load());
 
     DatabaseLoading::cleanupTables(*this, name, tables_failed_to_startup, log);
 }
