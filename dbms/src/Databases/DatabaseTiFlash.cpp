@@ -35,6 +35,7 @@
 #include <common/logger_useful.h>
 
 #include <future>
+#include <memory>
 
 namespace DB
 {
@@ -179,6 +180,7 @@ void DatabaseTiFlash::loadTables(Context & context, ThreadPool * thread_pool, bo
 
     const size_t bunch_size = TABLES_PARALLEL_LOAD_BUNCH_SIZE;
     size_t num_bunches = (total_tables + bunch_size - 1) / bunch_size;
+    std::vector<std::shared_ptr<std::packaged_task<void()>>> tasks;
     for (size_t i = 0; i < num_bunches; ++i)
     {
         auto begin = table_files.begin() + i * bunch_size;
@@ -187,6 +189,7 @@ void DatabaseTiFlash::loadTables(Context & context, ThreadPool * thread_pool, bo
         auto task = std::make_shared<std::packaged_task<void()>>([&task_function, begin, end] {
             task_function(begin, end);
         });
+        tasks.push_back(task);
 
         if (thread_pool)
         {
