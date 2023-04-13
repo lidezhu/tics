@@ -602,6 +602,7 @@ void StableDiskDelegator::removeRemoteDTFile(UInt64 local_external_id)
     auto iter = pool.remote_dt_file_size_map.find(local_external_id);
     RUNTIME_CHECK(iter != pool.remote_dt_file_size_map.end());
     // update global used size
+    LOG_DEBUG(Logger::get(), "remove remote dtfile. [local_external_id={}] size={}", local_external_id, iter->second.second);
     pool.global_capacity->freeRemoteUsedSize(pool.keyspace_id, iter->second.second);
     pool.remote_dt_file_size_map.erase(iter);
 }
