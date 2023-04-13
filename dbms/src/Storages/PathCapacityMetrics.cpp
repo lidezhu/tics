@@ -127,10 +127,10 @@ void PathCapacityMetrics::addRemoteUsedSize(KeyspaceID keyspace_id, size_t used_
 {
     if (used_bytes == 0)
         return;
-
     std::unique_lock<std::mutex> lock(mutex);
     auto iter = keyspace_id_to_used_bytes.emplace(keyspace_id, 0);
     iter.first->second += used_bytes;
+    LOG_DEBUG(Logger::get(), "addRemoteUsedSize [keyspace_id={}] [used_bytes={}] [current_size={}]", keyspace_id, used_bytes, iter.first->second);
 }
 
 void PathCapacityMetrics::freeRemoteUsedSize(KeyspaceID keyspace_id, size_t used_bytes)
@@ -139,6 +139,8 @@ void PathCapacityMetrics::freeRemoteUsedSize(KeyspaceID keyspace_id, size_t used
     auto iter = keyspace_id_to_used_bytes.find(keyspace_id);
     RUNTIME_CHECK(iter != keyspace_id_to_used_bytes.end());
     iter->second -= used_bytes;
+    RUNTIME_CHECK(iter->second >= 0);
+    LOG_DEBUG(Logger::get(), "freeRemoteUsedSize [keyspace_id={}] [used_bytes={}] [current_size={}]", keyspace_id, used_bytes, iter->second);
     if (iter->second == 0)
         keyspace_id_to_used_bytes.erase(iter);
 }
