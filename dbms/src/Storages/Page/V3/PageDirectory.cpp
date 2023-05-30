@@ -1506,6 +1506,8 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     }
 
     auto * last_writer = buildWriteGroup(&w, apply_lock);
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_build_write_group).Observe(watch.elapsedSeconds());
+    watch.restart();
     apply_lock.unlock();
 
     // `true` means the write process has completed without exception
