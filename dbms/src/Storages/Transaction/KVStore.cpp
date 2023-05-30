@@ -396,7 +396,6 @@ bool KVStore::canFlushRegionDataImpl(const RegionPtr & curr_region_ptr, UInt8 fl
 
     LOG_DEBUG(log, "{} approx mem cache info: rows {}, bytes {}", curr_region.toString(false), rows, size_bytes);
 
-    return false;
     bool can_flush = false;
     if (rows >= region_compact_log_min_rows.load(std::memory_order_relaxed)
         || size_bytes >= region_compact_log_min_bytes.load(std::memory_order_relaxed))
