@@ -50,6 +50,7 @@
 namespace CurrentMetrics
 {
 extern const Metric PSMVCCSnapshotsList;
+extern const Metric StoragePageV3WriterQueueSize;
 } // namespace CurrentMetrics
 
 namespace DB
@@ -1484,9 +1485,10 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     watch.restart();
 
     writers.push_back(&w);
+    CurrentMetrics::set(CurrentMetrics::StoragePageV3WriterQueueSize, writers.size());
     w.cv.wait(apply_lock, [&] { return w.done || &w == writers.front(); });
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wait_in_group).Observe(watch.elapsedSeconds());
-    watch.restart();
+    // watch.restart();
     if (w.done)
     {
         if (unlikely(!w.success))
@@ -1504,6 +1506,8 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         // group owner, others just return an empty set.
         return {};
     }
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_leader_wait_in_group).Observe(watch.elapsedSeconds());
+    watch.restart();
 
     auto * last_writer = buildWriteGroup(&w, apply_lock);
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_build_write_group).Observe(watch.elapsedSeconds());
@@ -1538,7 +1542,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         {
             writers.front()->cv.notify_one();
         }
-        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_notify_followe).Observe(notify_watch.elapsedSeconds());
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_notify_follower).Observe(notify_watch.elapsedSeconds());
     });
 
     UInt64 max_sequence = sequence.load();

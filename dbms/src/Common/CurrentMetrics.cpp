@@ -66,6 +66,7 @@
     M(StoragePoolV2Only)                        \
     M(StoragePoolV3Only)                        \
     M(StoragePoolMixMode)                       \
+    M(StoragePageV3WriterQueueSize)             \
     M(RegionPersisterRunMode)                   \
     M(S3Requests)                               \
     M(GlobalStorageRunMode)                     \

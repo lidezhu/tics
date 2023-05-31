@@ -205,6 +205,7 @@ namespace DB
         F(type_latch, {{"type", "latch"}}, ExpBuckets{0.00005, 1.8, 26}),                                                                           \
         F(type_wait_in_group, {{"type", "wait_in_group"}}, ExpBuckets{0.00005, 1.8, 26}),                                                           \
         F(type_notify_follower, {{"type", "notify_follower"}}, ExpBuckets{0.00005, 1.8, 26}),                                                           \
+        F(type_leader_wait_in_group, {{"type", "leader_wait_in_group"}}, ExpBuckets{0.00005, 1.8, 26}),                                                           \
         F(type_build_write_group, {{"type", "build_write_group"}}, ExpBuckets{0.00005, 1.8, 26}),                                                           \
         F(type_wal, {{"type", "wal"}}, ExpBuckets{0.00005, 1.8, 26}),                                                                               \
         F(type_commit, {{"type", "commit"}}, ExpBuckets{0.00005, 1.8, 26}))                                                                         \

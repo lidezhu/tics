@@ -974,15 +974,15 @@ int Server::main(const std::vector<std::string> & /*args*/)
     auto helper = GetEngineStoreServerHelper(
         &tiflash_instance_wrap);
 
-    if (STORAGE_FORMAT_CURRENT.page == PageFormat::V4)
-    {
-        LOG_INFO(log, "Using UniPS for proxy");
-        proxy_conf.addExtraArgs("unips-enabled", "1");
-    }
-    else
-    {
-        LOG_INFO(log, "UniPS is not enabled for proxy, page_version={}", STORAGE_FORMAT_CURRENT.page);
-    }
+    // if (STORAGE_FORMAT_CURRENT.page == PageFormat::V4)
+    // {
+    //     LOG_INFO(log, "Using UniPS for proxy");
+    //     proxy_conf.addExtraArgs("unips-enabled", "1");
+    // }
+    // else
+    // {
+    //     LOG_INFO(log, "UniPS is not enabled for proxy, page_version={}", STORAGE_FORMAT_CURRENT.page);
+    // }
 
     RaftStoreProxyRunner proxy_runner(RaftStoreProxyRunner::RunRaftStoreProxyParms{&helper, proxy_conf}, log);
 
