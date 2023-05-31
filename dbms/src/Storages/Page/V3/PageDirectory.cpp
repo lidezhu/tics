@@ -1515,6 +1515,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     std::unique_ptr<DB::Exception> exception = nullptr;
 
     SCOPE_EXIT({
+        Stopwatch notify_watch;
         apply_lock.lock();
         while (true)
         {
@@ -1537,6 +1538,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         {
             writers.front()->cv.notify_one();
         }
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_notify_followe).Observe(notify_watch.elapsedSeconds());
     });
 
     UInt64 max_sequence = sequence.load();
