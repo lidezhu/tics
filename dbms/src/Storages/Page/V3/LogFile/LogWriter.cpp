@@ -15,6 +15,8 @@
 #include <Common/Checksum.h>
 #include <Common/Exception.h>
 #include <Common/Logger.h>
+#include <Common/Stopwatch.h>
+#include <Common/TiFlashMetrics.h>
 #include <IO/ReadBuffer.h>
 #include <IO/WriteBufferFromFile.h>
 #include <IO/WriteHelpers.h>
@@ -163,7 +165,9 @@ void LogWriter::addRecord(ReadBuffer & payload, const size_t payload_size, const
 
     if (!manual_flush)
     {
+        Stopwatch watch;
         flush(write_limiter, background, true);
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_sync_wal).Observe(watch.elapsedSeconds());
     }
 }
 

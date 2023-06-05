@@ -1258,6 +1258,7 @@ UInt64 PageDirectory<Trait>::getMaxIdAfterRestart() const
 template <typename Trait>
 typename PageDirectory<Trait>::PageIdSet PageDirectory<Trait>::getAllPageIds()
 {
+    LOG_DEBUG(Logger::get(), "lock table mutex");
     std::set<PageId> page_ids;
 
     std::shared_lock read_lock(table_rw_mutex);
@@ -1274,6 +1275,7 @@ typename PageDirectory<Trait>::PageIdSet PageDirectory<Trait>::getAllPageIds()
 template <typename Trait>
 typename PageDirectory<Trait>::PageIdSet PageDirectory<Trait>::getAllPageIdsWithPrefix(const String & prefix, const DB::PageStorageSnapshotPtr & snap_)
 {
+    LOG_DEBUG(Logger::get(), "lock table mutex");
     if constexpr (std::is_same_v<Trait, universal::PageDirectoryTrait>)
     {
         PageIdSet page_ids;
@@ -1300,6 +1302,7 @@ typename PageDirectory<Trait>::PageIdSet PageDirectory<Trait>::getAllPageIdsWith
 template <typename Trait>
 typename PageDirectory<Trait>::PageIdSet PageDirectory<Trait>::getAllPageIdsInRange(const PageId & start, const PageId & end, const DB::PageStorageSnapshotPtr & snap_)
 {
+    LOG_DEBUG(Logger::get(), "lock table mutex");
     if constexpr (std::is_same_v<Trait, universal::PageDirectoryTrait>)
     {
         PageIdSet page_ids;
@@ -1326,6 +1329,7 @@ typename PageDirectory<Trait>::PageIdSet PageDirectory<Trait>::getAllPageIdsInRa
 template <typename Trait>
 std::optional<typename PageDirectory<Trait>::PageId> PageDirectory<Trait>::getLowerBound(const typename Trait::PageId & start, const DB::PageStorageSnapshotPtr & snap_)
 {
+    LOG_DEBUG(Logger::get(), "lock table mutex");
     if constexpr (std::is_same_v<Trait, universal::PageDirectoryTrait>)
     {
         auto seq = toConcreteSnapshot(snap_)->sequence;
@@ -1506,9 +1510,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         // group owner, others just return an empty set.
         return {};
     }
-    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_leader_wait_in_group).Observe(watch.elapsedSeconds());
     watch.restart();
-
     auto * last_writer = buildWriteGroup(&w, apply_lock);
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_build_write_group).Observe(watch.elapsedSeconds());
     watch.restart();
@@ -1560,11 +1562,12 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     wal->apply(Trait::Serializer::serializeTo(edit), write_limiter);
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wal).Observe(watch.elapsedSeconds());
     watch.restart();
-    SCOPE_EXIT({ GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(watch.elapsedSeconds()); });
 
     std::unordered_set<String> applied_data_files;
     {
         std::unique_lock table_lock(table_rw_mutex);
+        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_latch_table).Observe(watch.elapsedSeconds());
+        watch.restart();
 
         // stage 2, create entry version list for page_id.
         for (const auto & r : edit.getRecords())
@@ -1627,6 +1630,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         // stage 3, the edit committed, incr the sequence number to publish changes for `createSnapshot`
         sequence.fetch_add(edit_size);
     }
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(watch.elapsedSeconds());
 
     success = true;
     return applied_data_files;
