@@ -84,7 +84,7 @@ WALStore::WALStore(
 void WALStore::apply(String && serialized_edit, const WriteLimiterPtr & write_limiter)
 {
     ReadBufferFromString payload(serialized_edit);
-    StopWatch watch;
+    Stopwatch watch;
     {
         std::lock_guard lock(log_file_mutex);
         if (log_file == nullptr || log_file->writtenBytes() > config.roll_size)
