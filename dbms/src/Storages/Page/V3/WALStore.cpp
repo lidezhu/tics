@@ -14,7 +14,9 @@
 
 #include <Common/Exception.h>
 #include <Common/Logger.h>
+#include <Common/Stopwatch.h>
 #include <Common/SyncPoint/SyncPoint.h>
+#include <Common/TiFlashMetrics.h>
 #include <Encryption/FileProvider.h>
 #include <Poco/File.h>
 #include <Poco/Logger.h>
@@ -82,7 +84,7 @@ WALStore::WALStore(
 void WALStore::apply(String && serialized_edit, const WriteLimiterPtr & write_limiter)
 {
     ReadBufferFromString payload(serialized_edit);
-
+    StopWatch watch;
     {
         std::lock_guard lock(log_file_mutex);
         if (log_file == nullptr || log_file->writtenBytes() > config.roll_size)
@@ -93,6 +95,7 @@ void WALStore::apply(String && serialized_edit, const WriteLimiterPtr & write_li
 
         log_file->addRecord(payload, serialized_edit.size(), write_limiter);
     }
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wal_io).Observe(watch.elapsedSeconds());
 }
 
 Format::LogNumberType WALStore::rollToNewLogWriter(const std::lock_guard<std::mutex> &)

@@ -208,6 +208,7 @@ namespace DB
         F(type_leader_wait_in_group, {{"type", "leader_wait_in_group"}}, ExpBuckets{0.00005, 1.8, 26}),                                                           \
         F(type_build_write_group, {{"type", "build_write_group"}}, ExpBuckets{0.00005, 1.8, 26}),                                                           \
         F(type_wal, {{"type", "wal"}}, ExpBuckets{0.00005, 1.8, 26}),                                                                               \
+        F(type_wal_io, {{"type", "wal_io"}}, ExpBuckets{0.00005, 1.8, 26}),                                                                               \
         F(type_commit, {{"type", "commit"}}, ExpBuckets{0.00005, 1.8, 26}))                                                                         \
     M(tiflash_storage_logical_throughput_bytes, "The logical throughput of read tasks of storage in bytes", Histogram,                              \
         F(type_read, {{"type", "read"}}, EqualWidthBuckets{1 * 1024 * 1024, 60, 50 * 1024 * 1024}))                                                 \
