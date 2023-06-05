@@ -144,7 +144,7 @@ void LogWriter::addRecord(ReadBuffer & payload, const size_t payload_size, const
         // Check available space in write_buffer before writing
         if (buffer_size - write_buffer.offset() < fragment_length + header_size)
         {
-            flush(write_limiter, background);
+            flush(write_limiter, background, false);
         }
         try
         {
