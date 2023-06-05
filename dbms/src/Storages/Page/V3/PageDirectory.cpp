@@ -1563,11 +1563,11 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wal).Observe(watch.elapsedSeconds());
     watch.restart();
 
+    LOG_DEBUG(log, "Applied {} records to WAL", edit_size);
     std::unordered_set<String> applied_data_files;
     {
         std::unique_lock table_lock(table_rw_mutex);
         GET_METRIC(tiflash_storage_page_write_duration_seconds, type_latch_table).Observe(watch.elapsedSeconds());
-        watch.restart();
 
         // stage 2, create entry version list for page_id.
         for (const auto & r : edit.getRecords())
@@ -1630,6 +1630,7 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         // stage 3, the edit committed, incr the sequence number to publish changes for `createSnapshot`
         sequence.fetch_add(edit_size);
     }
+    LOG_DEBUG(log, "Applied {} records to WAL takes {} seconds", edit_size, watch.elapsedSeconds());
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(watch.elapsedSeconds());
 
     success = true;
