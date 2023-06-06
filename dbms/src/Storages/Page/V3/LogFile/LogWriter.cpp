@@ -32,14 +32,12 @@ LogWriter::LogWriter(
     String path_,
     const FileProviderPtr & file_provider_,
     Format::LogNumberType log_number_,
-    bool recycle_log_files_,
-    bool manual_flush_)
+    bool recycle_log_files_)
     : path(path_)
     , file_provider(file_provider_)
     , block_offset(0)
     , log_number(log_number_)
     , recycle_log_files(recycle_log_files_)
-    , manual_flush(manual_flush_)
     , write_buffer(nullptr, 0)
 {
     log_file = file_provider->newWritableFile(
@@ -71,7 +69,13 @@ size_t LogWriter::writtenBytes() const
     return written_bytes;
 }
 
-void LogWriter::flush(const WriteLimiterPtr & write_limiter, bool background, bool sync)
+void LogWriter::sync()
+{
+    flush();
+    log_file->fsync();
+}
+
+void LogWriter::flush(const WriteLimiterPtr & write_limiter, bool background)
 {
     if (write_buffer.offset() == 0)
     {
@@ -86,10 +90,6 @@ void LogWriter::flush(const WriteLimiterPtr & write_limiter, bool background, bo
                         /*background=*/background,
                         /*truncate_if_failed=*/false,
                         /*enable_failpoint=*/false);
-    if (sync)
-    {
-        log_file->fsync();
-    }
     written_bytes += write_buffer.offset();
 
     // reset the write_buffer
@@ -120,7 +120,7 @@ void LogWriter::addRecord(ReadBuffer & payload, const size_t payload_size, const
         static constexpr char MAX_ZERO_HEADER[Format::RECYCLABLE_HEADER_SIZE]{'\x00'};
         if (unlikely(buffer_size - write_buffer.offset() < leftover))
         {
-            flush(write_limiter, background, false);
+            flush(write_limiter, background);
         }
         writeString(MAX_ZERO_HEADER, leftover, write_buffer);
         block_offset = 0;
@@ -146,7 +146,7 @@ void LogWriter::addRecord(ReadBuffer & payload, const size_t payload_size, const
         // Check available space in write_buffer before writing
         if (buffer_size - write_buffer.offset() < fragment_length + header_size)
         {
-            flush(write_limiter, background, false);
+            flush(write_limiter, background);
         }
         try
         {
@@ -163,7 +163,7 @@ void LogWriter::addRecord(ReadBuffer & payload, const size_t payload_size, const
         begin = false;
     } while (payload.hasPendingData());
 
-    flush(write_limiter, background, !manual_flush);
+    flush(write_limiter, background);
 }
 
 void LogWriter::emitPhysicalRecord(Format::RecordType type, ReadBuffer & payload, size_t length)

@@ -1456,31 +1456,14 @@ void PageDirectory<Trait>::applyRefEditRecord(
 }
 
 template <typename Trait>
-typename PageDirectory<Trait>::Writer * PageDirectory<Trait>::buildWriteGroup(Writer * first, std::unique_lock<std::mutex> & /*lock*/)
-{
-    RUNTIME_CHECK(!writers.empty());
-    RUNTIME_CHECK(first == writers.front());
-    auto * last_writer = first;
-    auto iter = writers.begin();
-    iter++;
-    for (; iter != writers.end(); iter++)
-    {
-        auto * w = *iter;
-        first->edit->merge(std::move(*(w->edit)));
-        last_writer = w;
-    }
-    return last_writer;
-}
-
-template <typename Trait>
 std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, const WriteLimiterPtr & write_limiter)
 {
     // We need to make sure there is only one apply thread to write wal and then increase `sequence`.
     // Note that, as read threads use current `sequence` as read_seq, we cannot increase `sequence`
     // before applying edit to `mvcc_table_directory`.
 
-    Writer w;
-    w.edit = &edit;
+    Writer current;
+    current.edit = &edit;
 
     Stopwatch watch;
     std::unique_lock apply_lock(apply_mutex);
@@ -1488,18 +1471,15 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_latch).Observe(watch.elapsedSeconds());
     watch.restart();
 
-    writers.push_back(&w);
-    CurrentMetrics::set(CurrentMetrics::StoragePageV3WriterQueueSize, writers.size());
-    w.cv.wait(apply_lock, [&] { return w.done || &w == writers.front(); });
+    auto * last_writer = write_barrier.enter(apply_lock, &current);
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wait_in_group).Observe(watch.elapsedSeconds());
-    // watch.restart();
-    if (w.done)
+    if (last_writer == nullptr)
     {
-        if (unlikely(!w.success))
+        if (unlikely(!current.success))
         {
-            if (w.exception)
+            if (current.exception)
             {
-                w.exception->rethrow();
+                current.exception->rethrow();
             }
             else
             {
@@ -1511,9 +1491,6 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         return {};
     }
     watch.restart();
-    auto * last_writer = buildWriteGroup(&w, apply_lock);
-    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_build_write_group).Observe(watch.elapsedSeconds());
-    watch.restart();
     apply_lock.unlock();
 
     // `true` means the write process has completed without exception
@@ -1523,118 +1500,123 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     SCOPE_EXIT({
         Stopwatch notify_watch;
         apply_lock.lock();
-        while (true)
+        // check whether there are other writers in the write group
+        // if there are, set their `success` and `exception` state
+        if (&current != last_writer)
         {
-            auto * ready = writers.front();
-            writers.pop_front();
-            if (ready != &w)
+            auto * follower = current.next;
+            while (true)
             {
-                ready->done = true;
-                ready->success = success;
+                follower->success = success;
                 if (exception != nullptr)
                 {
-                    ready->exception = std::move(std::unique_ptr<DB::Exception>(exception->clone()));
+                    follower->exception = std::move(std::unique_ptr<DB::Exception>(exception->clone()));
                 }
-                ready->cv.notify_one();
+                if (follower == last_writer)
+                    break;
+                follower = follower->next;
             }
-            if (ready == last_writer)
-                break;
         }
-        if (!writers.empty())
-        {
-            writers.front()->cv.notify_one();
-        }
+        write_barrier.commit(apply_lock, &current);
         GET_METRIC(tiflash_storage_page_write_duration_seconds, type_notify_follower).Observe(notify_watch.elapsedSeconds());
     });
 
     UInt64 max_sequence = sequence.load();
-    const auto edit_size = edit.size();
-
-    // stage 1, persisted the changes to WAL.
-    // In order to handle {put X, ref Y->X, del X} inside one WriteBatch (and
-    // in later batch pipeline), we increase the sequence for each record.
-    for (auto & r : edit.getMutRecords())
+    auto * w = &current;
+    while (true)
     {
-        ++max_sequence;
-        r.version = PageVersion(max_sequence, 0);
+        // stage 1, persisted the changes to WAL.
+        // In order to handle {put X, ref Y->X, del X} inside one WriteBatch (and
+        // in later batch pipeline), we increase the sequence for each record.
+        for (auto & r : w->edit->getMutRecords())
+        {
+            ++max_sequence;
+            r.version = PageVersion(max_sequence, 0);
+        }
+        wal->apply<false>(Trait::Serializer::serializeTo(*(w->edit)), write_limiter);
+        if (w == last_writer)
+            break;
+        w = w->next;
     }
-
-    wal->apply(Trait::Serializer::serializeTo(edit), write_limiter);
+    wal->sync();
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wal).Observe(watch.elapsedSeconds());
     watch.restart();
 
     std::unordered_set<String> applied_data_files;
+    size_t total_edit_size = 0;
     {
         std::unique_lock table_lock(table_rw_mutex);
-        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_latch_table).Observe(watch.elapsedSeconds());
-
-        // stage 2, create entry version list for page_id.
-        for (const auto & r : edit.getRecords())
+        w = &current;
+        while (true)
         {
-            // Protected in write_lock
-            auto [iter, created] = mvcc_table_directory.insert(std::make_pair(r.page_id, nullptr));
-            if (created)
+            auto edit_size = w->edit->size();
+            total_edit_size += edit_size;
+            // stage 2, create entry version list for page_id.
+            for (const auto & r : w->edit->getRecords())
             {
-                iter->second = std::make_shared<VersionedPageEntries<Trait>>();
-            }
+                // Protected in write_lock
+                auto [iter, created] = mvcc_table_directory.insert(std::make_pair(r.page_id, nullptr));
+                if (created)
+                {
+                    iter->second = std::make_shared<VersionedPageEntries<Trait>>();
+                }
 
-            auto & version_list = iter->second;
-            try
-            {
-                switch (r.type)
+                auto & version_list = iter->second;
+                try
                 {
-                case EditRecordType::PUT_EXTERNAL:
-                {
-                    auto holder = version_list->createNewExternal(r.version, r.entry);
-                    if (holder)
+                    switch (r.type)
                     {
-                        // put the new created holder into `external_ids`
-                        *holder = r.page_id;
-                        external_ids_by_ns.addExternalId(holder);
+                    case EditRecordType::PUT_EXTERNAL:
+                    {
+                        auto holder = version_list->createNewExternal(r.version, r.entry);
+                        if (holder)
+                        {
+                            // put the new created holder into `external_ids`
+                            *holder = r.page_id;
+                            external_ids_by_ns.addExternalId(holder);
+                        }
+                        break;
                     }
-                    break;
-                }
-                case EditRecordType::PUT:
-                    version_list->createNewEntry(r.version, r.entry);
-                    break;
-                case EditRecordType::DEL:
-                    version_list->createDelete(r.version);
-                    break;
-                case EditRecordType::REF:
-                    applyRefEditRecord(mvcc_table_directory, version_list, r, r.version);
-                    break;
-                case EditRecordType::UPSERT:
-                case EditRecordType::VAR_DELETE:
-                case EditRecordType::VAR_ENTRY:
-                case EditRecordType::VAR_EXTERNAL:
-                case EditRecordType::VAR_REF:
-                case EditRecordType::UPDATE_DATA_FROM_REMOTE:
-                    throw Exception(fmt::format("should not handle edit with invalid type [type={}]", magic_enum::enum_name(r.type)));
-                }
+                    case EditRecordType::PUT:
+                        version_list->createNewEntry(r.version, r.entry);
+                        break;
+                    case EditRecordType::DEL:
+                        version_list->createDelete(r.version);
+                        break;
+                    case EditRecordType::REF:
+                        applyRefEditRecord(mvcc_table_directory, version_list, r, r.version);
+                        break;
+                    case EditRecordType::UPSERT:
+                    case EditRecordType::VAR_DELETE:
+                    case EditRecordType::VAR_ENTRY:
+                    case EditRecordType::VAR_EXTERNAL:
+                    case EditRecordType::VAR_REF:
+                    case EditRecordType::UPDATE_DATA_FROM_REMOTE:
+                        throw Exception(fmt::format("should not handle edit with invalid type [type={}]", magic_enum::enum_name(r.type)));
+                    }
 
-                // collect the applied remote data_file_ids
-                if (r.entry.checkpoint_info.has_value())
+                    // collect the applied remote data_file_ids
+                    if (r.entry.checkpoint_info.has_value())
+                    {
+                        applied_data_files.emplace(*r.entry.checkpoint_info.data_location.data_file_id);
+                    }
+                }
+                catch (DB::Exception & e)
                 {
-                    applied_data_files.emplace(*r.entry.checkpoint_info.data_location.data_file_id);
+                    e.addMessage(fmt::format(" [type={}] [page_id={}] [ver={}] [edit_size={}]", magic_enum::enum_name(r.type), r.page_id, r.version, edit_size));
+                    exception.reset(e.clone());
+                    e.rethrow();
                 }
             }
-            catch (DB::Exception & e)
-            {
-                e.addMessage(fmt::format(" [type={}] [page_id={}] [ver={}] [edit_size={}]", magic_enum::enum_name(r.type), r.page_id, r.version, edit_size));
-                exception.reset(e.clone());
-                e.rethrow();
-            }
+            if (w == last_writer)
+                break;
+            w = w->next;
         }
 
         // stage 3, the edit committed, incr the sequence number to publish changes for `createSnapshot`
-        sequence.fetch_add(edit_size);
+        sequence.fetch_add(total_edit_size);
     }
-    auto seconds = watch.elapsedSeconds();
-    if (unlikely(seconds > 0.5))
-    {
-        LOG_DEBUG(log, "Applied {} records to WAL takes {} seconds", edit_size, seconds);
-    }
-    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(seconds);
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(watch.elapsedSeconds());
 
     success = true;
     return applied_data_files;

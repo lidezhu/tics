@@ -826,7 +826,7 @@ TEST(LogFileRWTest2, ManuallyFlush)
     auto payload = repeatedString("medium", 50000);
     Format::LogNumberType log_num = 30;
 
-    auto writer = std::make_unique<LogWriter>(file_name, provider, log_num, /* recycle_log */ true, /* manual_flush */ true);
+    auto writer = std::make_unique<LogWriter>(file_name, provider, log_num, /* recycle_log */ true);
     {
         ReadBufferFromString buff(payload);
         ASSERT_NO_THROW(writer->addRecord(buff, payload.size()));
@@ -835,7 +835,7 @@ TEST(LogFileRWTest2, ManuallyFlush)
         ReadBufferFromString buff(payload);
         ASSERT_NO_THROW(writer->addRecord(buff, payload.size()));
     }
-    writer->flush();
+    writer->sync();
 
     auto read_buf = createReadBufferFromFileBaseByFileProvider(
         provider,

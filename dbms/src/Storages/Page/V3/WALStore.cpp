@@ -81,21 +81,6 @@ WALStore::WALStore(
 {
 }
 
-void WALStore::apply(String && serialized_edit, const WriteLimiterPtr & write_limiter)
-{
-    ReadBufferFromString payload(serialized_edit);
-    {
-        std::lock_guard lock(log_file_mutex);
-        if (log_file == nullptr || log_file->writtenBytes() > config.roll_size)
-        {
-            // Roll to a new log file
-            rollToNewLogWriter(lock);
-        }
-
-        log_file->addRecord(payload, serialized_edit.size(), write_limiter);
-    }
-}
-
 Format::LogNumberType WALStore::rollToNewLogWriter(const std::lock_guard<std::mutex> &)
 {
     // Roll to a new log file
@@ -108,7 +93,7 @@ Format::LogNumberType WALStore::rollToNewLogWriter(const std::lock_guard<std::mu
 
 std::tuple<std::unique_ptr<LogWriter>, LogFilename> WALStore::createLogWriter(
     const std::pair<Format::LogNumberType, Format::LogNumberType> & new_log_lvl,
-    bool manual_flush)
+    bool temp)
 {
     String path;
 
@@ -131,7 +116,7 @@ std::tuple<std::unique_ptr<LogWriter>, LogFilename> WALStore::createLogWriter(
     path += wal_folder_prefix;
 
     LogFilename log_filename = LogFilename{
-        (manual_flush ? LogFileStage::Temporary : LogFileStage::Normal),
+        (temp ? LogFileStage::Temporary : LogFileStage::Normal),
         new_log_lvl.first,
         new_log_lvl.second,
         0,
@@ -144,8 +129,7 @@ std::tuple<std::unique_ptr<LogWriter>, LogFilename> WALStore::createLogWriter(
         fullname,
         provider,
         new_log_lvl.first,
-        /*recycle*/ true,
-        /*manual_flush*/ manual_flush);
+        /*recycle*/ true);
     return {std::move(log_writer), log_filename};
 }
 
@@ -219,13 +203,13 @@ bool WALStore::saveSnapshot(
     // Use {largest_log_num, 1} to save the `edit`
     const auto log_num = files_snap.persisted_log_files.rbegin()->log_num;
     // Create a temporary file for saving directory snapshot
-    auto [compact_log, log_filename] = createLogWriter({log_num, 1}, /*manual_flush*/ true);
+    auto [compact_log, log_filename] = createLogWriter({log_num, 1}, true);
 
     // TODO: split the snap into multiple records in LogFile so that the memory
     //       consumption could be more smooth.
     ReadBufferFromString payload(serialized_snap);
     compact_log->addRecord(payload, serialized_snap.size(), write_limiter, /*background*/ true);
-    compact_log->flush(write_limiter, /*background*/ true);
+    compact_log->sync();
     compact_log.reset(); // close fd explicitly before renaming file.
 
     // Rename it to be a normal log file.

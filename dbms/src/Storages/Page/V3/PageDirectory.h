@@ -449,14 +449,72 @@ private:
     struct Writer
     {
         PageEntriesEdit * edit;
-        bool done = false; // The work has been performed by other thread
-        bool success = false; // The work complete successfully
+        bool success = false;
         std::unique_ptr<DB::Exception> exception;
-        std::condition_variable cv;
+        Writer * next;
     };
 
-    // return the last writer in the group
-    Writer * buildWriteGroup(Writer * first, std::unique_lock<std::mutex> & /*lock*/);
+    struct WriteBarrier
+    {
+        // return the tail of the write group
+        Writer * enter(std::unique_lock<std::mutex> & lock, Writer * writer)
+        {
+            if (tail != nullptr)
+            {
+                // there is a write group writing, try to create or join the current waiting write group
+                tail->next = writer;
+                tail = writer;
+                if (pending_leader != nullptr)
+                {
+                    // wait the pending leader finish the work and notify it
+                    follower_cvs[pending_index % 2].wait(lock);
+                    return nullptr;
+                }
+                else
+                {
+                    pending_leader = writer;
+                    pending_index = (pending_index + 1) % 2;
+                    leader_cv.wait(lock);
+                    // now the writer is leader
+                    pending_leader = nullptr;
+                }
+            }
+            else
+            {
+                // form a new write group and become the leader
+                RUNTIME_CHECK(pending_leader == nullptr);
+                head = writer;
+                tail = writer;
+            }
+            return tail;
+        }
+
+        void commit(std::unique_lock<std::mutex> & /* lock */, Writer * current_leader)
+        {
+            RUNTIME_CHECK(current_leader == head);
+            if (pending_leader != nullptr)
+            {
+                leader_cv.notify_one();
+                follower_cvs[(pending_index + 1) % 2].notify_all();
+                head = pending_leader;
+            }
+            else
+            {
+                follower_cvs[pending_index % 2].notify_all();
+                head = nullptr;
+                tail = nullptr;
+            }
+        }
+
+    private:
+        Writer * head = nullptr;
+        Writer * tail = nullptr;
+        Writer * pending_leader = nullptr;
+        size_t pending_index = 0;
+
+        std::condition_variable leader_cv;
+        std::condition_variable follower_cvs[2];
+    };
 
 private:
     // max page id after restart(just used for table storage).
@@ -468,21 +526,8 @@ private:
 
     // Used for avoid concurrently apply edits to wal and mvcc_table_directory.
     mutable std::mutex apply_mutex;
-    // This is a queue of Writers to PageDirectory and is protected by apply_mutex.
-    // Every writer enqueue itself to this queue before writing.
-    // And the head writer of the queue will become the leader and is responsible to write and sync the WAL.
-    // The write process of the leader:
-    //   1. scan the queue to find all available writers and merge their edits to the leader's edit;
-    //   2. unlock the apply_mutex;
-    //   3. write the edits to the WAL and sync it;
-    //   4. apply the edit to mvcc_table_directory;
-    //   5. lock the apply_mutex;
-    //   6. dequeue the writers found in step 1 and notify them that their write work has completed;
-    //   7. if the writer queue is not empty, notify the head writer to become the leader of next write;
-    // Other writers in the queue just wait the leader to wake them up and one of the two conditions must be true:
-    //   1. its work has been finished by the leader, and they can just return;
-    //   2. it becomes the head of the queue, so it continue to finish the write process of the leader;
-    std::deque<Writer *> writers;
+
+    WriteBarrier write_barrier;
 
     // Used to protect mvcc_table_directory between apply threads and read threads
     mutable std::shared_mutex table_rw_mutex;

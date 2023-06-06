@@ -60,7 +60,34 @@ public:
 
     WALStoreReaderPtr createReaderForFiles(const String & identifier, const LogFilenameSet & log_filenames, const ReadLimiterPtr & read_limiter);
 
-    void apply(String && serialized_edit, const WriteLimiterPtr & write_limiter = nullptr);
+    template <bool sync = true>
+    void apply(String && serialized_edit, const WriteLimiterPtr & write_limiter = nullptr)
+    {
+        ReadBufferFromString payload(serialized_edit);
+        {
+            std::lock_guard lock(log_file_mutex);
+            if (log_file == nullptr || log_file->writtenBytes() > config.roll_size)
+            {
+                // Roll to a new log file
+                if (log_file != nullptr)
+                    log_file->sync();
+                rollToNewLogWriter(lock);
+            }
+
+            log_file->addRecord(payload, serialized_edit.size(), write_limiter);
+            if constexpr (sync)
+            {
+                log_file->sync();
+            }
+        }
+    }
+
+    void sync()
+    {
+        std::lock_guard lock(log_file_mutex);
+        RUNTIME_CHECK(log_file != nullptr);
+        log_file->sync();
+    }
 
     FileUsageStatistics getFileUsageStatistics() const
     {
@@ -113,7 +140,7 @@ private:
     std::tuple<std::unique_ptr<LogWriter>, LogFilename>
     createLogWriter(
         const std::pair<Format::LogNumberType, Format::LogNumberType> & new_log_lvl,
-        bool manual_flush);
+        bool temp);
 
     Format::LogNumberType rollToNewLogWriter(const std::lock_guard<std::mutex> &);
 
