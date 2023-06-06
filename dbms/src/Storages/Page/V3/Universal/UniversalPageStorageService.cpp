@@ -78,7 +78,7 @@ UniversalPageStorageServicePtr UniversalPageStorageService::create(
             return service->gc();
         },
         false,
-        /*interval_ms*/ 60 * 1000);
+        /*interval_ms*/ 20 * 1000);
     return service;
 }
 
@@ -289,7 +289,7 @@ bool UniversalPageStorageService::uploadCheckpointImpl(
 bool UniversalPageStorageService::gc()
 {
     Timepoint now = Clock::now();
-    const std::chrono::seconds try_gc_period(60);
+    const std::chrono::seconds try_gc_period(20);
     if (now < (last_try_gc_time.load() + try_gc_period))
         return false;
 
