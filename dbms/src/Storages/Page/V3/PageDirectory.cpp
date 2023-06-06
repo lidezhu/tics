@@ -1629,8 +1629,12 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
         // stage 3, the edit committed, incr the sequence number to publish changes for `createSnapshot`
         sequence.fetch_add(edit_size);
     }
-    LOG_DEBUG(log, "Applied {} records to WAL takes {} seconds", edit_size, watch.elapsedSeconds());
-    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(watch.elapsedSeconds());
+    auto seconds = watch.elapsedSeconds();
+    if (unlikely(seconds > 0.5))
+    {
+        LOG_DEBUG(log, "Applied {} records to WAL takes {} seconds", edit_size, seconds);
+    }
+    GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(seconds);
 
     success = true;
     return applied_data_files;
