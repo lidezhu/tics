@@ -163,12 +163,7 @@ void LogWriter::addRecord(ReadBuffer & payload, const size_t payload_size, const
         begin = false;
     } while (payload.hasPendingData());
 
-    if (!manual_flush)
-    {
-        Stopwatch watch;
-        flush(write_limiter, background, true);
-        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_sync_wal).Observe(watch.elapsedSeconds());
-    }
+    flush(write_limiter, background, !manual_flush);
 }
 
 void LogWriter::emitPhysicalRecord(Format::RecordType type, ReadBuffer & payload, size_t length)

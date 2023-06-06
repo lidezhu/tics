@@ -138,7 +138,7 @@ void PosixWritableFile::doOpenFile(bool truncate_when_exists_, int flags, mode_t
 int PosixWritableFile::fsync()
 {
     ProfileEvents::increment(ProfileEvents::FileFSync);
-    return ::fdatasync(fd);
+    return ::fsync(fd);
 }
 
 int PosixWritableFile::ftruncate(off_t length)
