@@ -54,7 +54,7 @@ static_assert((PAGE_SIZE_STEP & (PAGE_SIZE_STEP - 1)) == 0, "PAGE_SIZE_STEP shou
 
 // PageStorage V3 define
 static constexpr UInt64 BLOBFILE_LIMIT_SIZE = 256 * MB;
-static constexpr UInt64 PAGE_META_ROLL_SIZE = 2 * MB;
+static constexpr UInt64 PAGE_META_ROLL_SIZE = 20 * MB;
 static constexpr UInt64 MAX_PERSISTED_LOG_FILES = 4;
 
 using NamespaceID = UInt64;
