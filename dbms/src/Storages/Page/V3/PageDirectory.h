@@ -454,10 +454,16 @@ private:
         Writer * next;
     };
 
+    struct WriteGroup
+    {
+        Writer * tail;
+        size_t group_index;
+    };
+
     struct WriteBarrier
     {
         // return the tail of the write group
-        Writer * enter(std::unique_lock<std::mutex> & lock, Writer * writer)
+        std::shared_ptr<WriteGroup> enter(std::unique_lock<std::mutex> & lock, Writer * writer)
         {
             if (tail != nullptr)
             {
@@ -467,13 +473,13 @@ private:
                 if (pending_leader != nullptr)
                 {
                     // wait the pending leader finish the work and notify it
-                    follower_cvs[pending_index % 2].wait(lock);
+                    follower_cvs[pending_index % 3].wait(lock);
                     return nullptr;
                 }
                 else
                 {
                     pending_leader = writer;
-                    pending_index = (pending_index + 1) % 2;
+                    pending_index = (pending_index + 1) % 3;
                     leader_cv.wait(lock);
                     // now the writer is leader
                     pending_leader = nullptr;
@@ -486,24 +492,29 @@ private:
                 head = writer;
                 tail = writer;
             }
-            return tail;
+            return std::make_shared<WriteGroup>(
+                WriteGroup{.tail = tail, .group_index = pending_index});
         }
 
-        void commit(std::unique_lock<std::mutex> & /* lock */, Writer * current_leader)
+        void notifyNextLeader(std::unique_lock<std::mutex> & /* lock */, Writer * current_leader)
         {
             RUNTIME_CHECK(current_leader == head);
             if (pending_leader != nullptr)
             {
                 leader_cv.notify_one();
-                follower_cvs[(pending_index + 1) % 2].notify_all();
                 head = pending_leader;
             }
             else
             {
-                follower_cvs[pending_index % 2].notify_all();
                 head = nullptr;
                 tail = nullptr;
             }
+        }
+
+        // TODO: do we need lock here?
+        void notifyFollowers(const WriteGroup & group)
+        {
+            follower_cvs[group.group_index].notify_all();
         }
 
     private:
@@ -513,7 +524,7 @@ private:
         size_t pending_index = 0;
 
         std::condition_variable leader_cv;
-        std::condition_variable follower_cvs[2];
+        std::condition_variable follower_cvs[3];
     };
 
 private:
@@ -523,6 +534,7 @@ private:
     // except for specific situations
     UInt64 max_page_id;
     std::atomic<UInt64> sequence;
+    std::atomic<UInt64> alloc_sequence;
 
     // Used for avoid concurrently apply edits to wal and mvcc_table_directory.
     mutable std::mutex apply_mutex;

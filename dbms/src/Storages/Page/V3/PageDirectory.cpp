@@ -957,6 +957,7 @@ template <typename Trait>
 PageDirectory<Trait>::PageDirectory(String storage_name, WALStorePtr && wal_, UInt64 max_persisted_log_files_)
     : max_page_id(0)
     , sequence(0)
+    , alloc_sequence(0)
     , wal(std::move(wal_))
     , max_persisted_log_files(max_persisted_log_files_)
     , log(Logger::get(storage_name))
@@ -1471,9 +1472,9 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_latch).Observe(watch.elapsedSeconds());
     watch.restart();
 
-    auto * last_writer = write_barrier.enter(apply_lock, &current);
+    auto write_group = write_barrier.enter(apply_lock, &current);
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wait_in_group).Observe(watch.elapsedSeconds());
-    if (last_writer == nullptr)
+    if (!write_group)
     {
         if (unlikely(!current.success))
         {
@@ -1493,64 +1494,40 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
     watch.restart();
     apply_lock.unlock();
 
-    // `true` means the write process has completed without exception
-    bool success = false;
-    std::unique_ptr<DB::Exception> exception = nullptr;
-
-    SCOPE_EXIT({
-        Stopwatch notify_watch;
-        apply_lock.lock();
-        // check whether there are other writers in the write group
-        // if there are, set their `success` and `exception` state
-        if (&current != last_writer)
-        {
-            auto * follower = current.next;
-            while (true)
-            {
-                follower->success = success;
-                if (exception != nullptr)
-                {
-                    follower->exception = std::move(std::unique_ptr<DB::Exception>(exception->clone()));
-                }
-                if (follower == last_writer)
-                    break;
-                follower = follower->next;
-            }
-        }
-        write_barrier.commit(apply_lock, &current);
-        GET_METRIC(tiflash_storage_page_write_duration_seconds, type_notify_follower).Observe(notify_watch.elapsedSeconds());
-    });
-
-    UInt64 max_sequence = sequence.load();
+    // stage 1, persisted the changes to WAL.
+    // In order to handle {put X, ref Y->X, del X} inside one WriteBatch (and
+    // in later batch pipeline), we increase the sequence for each record.
+    UInt64 max_sequence = alloc_sequence.load();
     auto * w = &current;
+    size_t total_edit_size = 0;
     while (true)
     {
-        // stage 1, persisted the changes to WAL.
-        // In order to handle {put X, ref Y->X, del X} inside one WriteBatch (and
-        // in later batch pipeline), we increase the sequence for each record.
+        total_edit_size += w->edit->size();
         for (auto & r : w->edit->getMutRecords())
         {
             ++max_sequence;
             r.version = PageVersion(max_sequence, 0);
         }
         wal->apply<false>(Trait::Serializer::serializeTo(*(w->edit)), write_limiter);
-        if (w == last_writer)
+        if (w == write_group->tail)
             break;
         w = w->next;
     }
+    alloc_sequence.fetch_add(total_edit_size);
     wal->sync();
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_wal).Observe(watch.elapsedSeconds());
     watch.restart();
 
     std::unordered_set<String> applied_data_files;
-    size_t total_edit_size = 0;
     {
         std::unique_lock table_lock(table_rw_mutex);
+        apply_lock.lock();
+        write_barrier.notifyNextLeader(apply_lock, &current);
+        apply_lock.unlock();
         w = &current;
         while (true)
         {
             auto edit_size = w->edit->size();
-            total_edit_size += edit_size;
             // stage 2, create entry version list for page_id.
             for (const auto & r : w->edit->getRecords())
             {
@@ -1604,21 +1581,21 @@ std::unordered_set<String> PageDirectory<Trait>::apply(PageEntriesEdit && edit, 
                 catch (DB::Exception & e)
                 {
                     e.addMessage(fmt::format(" [type={}] [page_id={}] [ver={}] [edit_size={}]", magic_enum::enum_name(r.type), r.page_id, r.version, edit_size));
-                    exception.reset(e.clone());
                     e.rethrow();
                 }
             }
-            if (w == last_writer)
+            w->success = true;
+            if (w == write_group->tail)
                 break;
             w = w->next;
         }
 
         // stage 3, the edit committed, incr the sequence number to publish changes for `createSnapshot`
         sequence.fetch_add(total_edit_size);
+        write_barrier.notifyFollowers(*write_group);
     }
     GET_METRIC(tiflash_storage_page_write_duration_seconds, type_commit).Observe(watch.elapsedSeconds());
 
-    success = true;
     return applied_data_files;
 }
 

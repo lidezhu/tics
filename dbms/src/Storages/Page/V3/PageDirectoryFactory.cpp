@@ -49,6 +49,7 @@ PageDirectoryFactory<Trait>::createFromReader(const String & storage_name, WALSt
 
     // Reset the `sequence` to the maximum of persisted.
     dir->sequence = max_applied_ver.sequence;
+    dir->alloc_sequence = max_applied_ver.sequence;
 
     // After restoring from the disk, we need cleanup all invalid entries in memory, or it will
     // try to run GC again on some entries that are already marked as invalid in BlobStore.
@@ -91,6 +92,7 @@ PageDirectoryFactory<Trait>::dangerouslyCreateFromEditWithoutWAL(const String & 
     loadEdit(dir, edit);
     // Reset the `sequence` to the maximum of persisted.
     dir->sequence = max_applied_ver.sequence;
+    dir->alloc_sequence = max_applied_ver.sequence;
 
     // Remove invalid entries
     dir->gcInMemEntries({.need_removed_entries = false});
@@ -117,6 +119,7 @@ PageDirectoryFactory<Trait>::createFromEditForTest(const String & storage_name, 
     loadEdit(dir, edit);
     // Reset the `sequence` to the maximum of persisted.
     dir->sequence = max_applied_ver.sequence;
+    dir->alloc_sequence = max_applied_ver.sequence;
     RUNTIME_CHECK(dir->sequence, mock_sequence);
 
     // After restoring from the disk, we need cleanup all invalid entries in memory, or it will
